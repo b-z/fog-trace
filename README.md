@@ -69,7 +69,7 @@ All archives share one set of marks. When you open another archive (a newer sync
 - Marked points are never deleted. Those not detected in the current archive (fixed, or from another archive) are kept and shown faded.
 - Points still to review that are no longer detected are dropped (usually because they were fixed).
 
-The "Archive & marks" menu can **export marks** as JSON (backup, or moving to another device) and **import** them again. Clearing the site's data in the browser deletes the marks too, so keep a backup.
+The "Import archive & marks" menu can **export marks** as JSON (backup, or moving to another device) and **import** them again. Clearing the site's data in the browser deletes the marks too, so keep a backup.
 
 ## Related project
 

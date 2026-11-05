@@ -90,12 +90,15 @@
   /* 打开存档 */
   #welcome { position: absolute; inset: 0; z-index: 1100; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(10,10,10,.82); }
   #welcome.show { display: flex; }
+  #welcome { overflow-y: auto; }
   #welcome .box { max-width: 560px; width: 100%; background: #161616; border: 1px solid #2c2c2c; border-radius: 12px; padding: 22px 24px; }
   #welcome h2 { margin: 0 0 6px; font-size: 18px; font-weight: 650; }
   #welcome p { margin: 6px 0; color: #bbb; }
   #welcome .pick { display: flex; gap: 10px; margin: 16px 0 10px; flex-wrap: wrap; }
   #welcome .pick button { font: inherit; font-size: 14px; padding: 9px 16px; border-radius: 8px; border: 1px solid #6b5a1c; background: #241f0e; color: var(--accent); cursor: pointer; }
-  #welcome .pick button.sec { border-color: #333; background: #1e1e1e; color: var(--text); }
+  #welcome .pick button.sec { border-color: #333; background: #1e1e1e; color: var(--text); align-self: flex-start; }
+  #welcome .pickzip { display: flex; flex-direction: column; gap: 4px; }
+  #welcome .pickzip small { color: var(--muted); font-size: 11.5px; }
   #welcome .drop { border: 1.5px dashed #3a3a3a; border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); }
   #welcome.drag .drop { border-color: var(--accent); color: var(--accent); }
   #welcome details { margin-top: 12px; color: #aaa; font-size: 12px; }
@@ -132,6 +135,7 @@
     #bar { grid-column: 1; padding: 8px 12px; gap: 8px; }
     #status { flex-basis: 100%; order: 10; text-align: left; white-space: normal; }
     #side { border-left: 0; border-top: 1px solid var(--line); }
+    #welcome { align-items: flex-start; }      /* 手机上地图区域矮，弹框在里面滚动 */
   }
 </style>
 </head>
@@ -149,7 +153,7 @@
     <span id="status"></span>
     <button class="barbtn" id="b-detect" disabled data-i18n-title="bar.detectTitle"></button>
     <div class="menu" id="menu">
-      <button class="barbtn" id="b-menu" data-i18n="bar.menu"></button>
+      <button class="barbtn iconbtn" id="b-menu"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M8 10.5V2.5M4.75 5.75 8 2.5l3.25 3.25M2.5 10v2.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V10"/></svg><span data-i18n="bar.menu"></span></button>
       <div class="pop">
         <button id="m-open" data-i18n="menu.open"></button>
         <hr>
@@ -173,7 +177,7 @@
         <h2 data-i18n="w.title"></h2>
         <p data-i18n="w.intro"></p>
         <div class="pick">
-          <button id="w-zip" data-i18n="w.zip"></button>
+          <span class="pickzip"><button id="w-zip" data-i18n="w.zip"></button><small data-i18n="w.zipHint"></small></span>
           <button id="w-dir" class="sec" data-i18n="w.dir"></button>
         </div>
         <div class="drop" data-i18n="w.drop"></div>
@@ -677,7 +681,7 @@
     } catch (err) { welcomeError(err.message); }
   });
 
-  // ---------- 菜单：存档与标记 ----------
+  // ---------- 菜单：导入存档与标记 ----------
   $('b-menu').onclick = function (e) { e.stopPropagation(); $('menu').classList.toggle('open'); };
   document.addEventListener('click', function () { $('menu').classList.remove('open'); });
   $('m-open').onclick = function () { showWelcome(true, !!archive); };
