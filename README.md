@@ -8,7 +8,7 @@
 
 ### 👉 [Open Fog Trace](https://fog-trace.pages.dev/)
 
-Fog Trace opens the data of [Fog of World](https://fogofworld.app) (the app that clears a fog wherever you go) and finds the **dead ends** in your tracks: trips that start or stop in the middle of nowhere, places where you turned back, and gaps where GPS dropped out. You review them one by one, sorted by how likely they are to be real, and you can fix what you find: erase GPS glitches, draw in the road you actually took, and export an archive the app can import.
+Fog Trace opens the data of [Fog of World](https://fogofworld.app) and finds the **dead ends** in your tracks: trips that start or stop in the middle of nowhere, places where you turned back, and gaps where GPS dropped out. You review them one by one, sorted by how likely they are to be real, and you can fix what you find: erase GPS glitches, draw in the road you actually took, and export an archive the app can import.
 
 It is a static web page. Your archive is read and processed only in your browser and is never uploaded; marks and edits are stored in your browser too.
 
@@ -36,7 +36,7 @@ The page is available in English, Chinese and Japanese (switch at the top right)
 |---|---|
 | Dead-end detection | Finds where tracks stick out without connecting to anything: the start and end of trips, turning back, lost GPS signal. Each place gets a confidence from 0 to 100 |
 | Review | Sorted by confidence. The tabs filter the list; the map always shows every point (red = to review, gray = reviewed). A "Min score" slider hides weak candidates |
-| Box `B` | Drag a box: every red point inside becomes "ignored" in one step (`U` undoes the whole box). Points already marked fixed stay as they are |
+| Box `B` | Drag a box to mark every red point inside as "ignored" at once; handy for clearing a whole area of false detections |
 | Eraser `E` | Drag to erase. `[` `]` change the size; hold Space to pan; zoom in to level 12 or more |
 | Pen `P` | A 1-pixel line, as thin as the tracks. Click to add points; right-click, double-click or `Enter` to finish; `Backspace` removes the last point, `Esc` cancels |
 | Snapping | Pen points snap to nearby dead ends and line ends (solid ring), otherwise to the nearest track pixel (dashed ring). Hold `⌥` to turn snapping off |
@@ -103,7 +103,7 @@ python3 -m http.server 8000 --directory web
 
 Then open <http://localhost:8000/>. It needs a current Chrome, Edge, Safari or Firefox (`DecompressionStream`, Web Workers, IndexedDB).
 
-The site is deployed to Cloudflare Pages from the `web/` folder:
+Every push to `main` that changes `web/` deploys the site to Cloudflare Pages (`.github/workflows/deploy.yml`, using the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). To deploy by hand:
 
 ```bash
 npx wrangler@4 pages deploy web --project-name fog-trace --branch main
