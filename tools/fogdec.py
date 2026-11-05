@@ -1,6 +1,6 @@
 """Fog of World Sync.zip decoder (same format as ../src/decoder.js).
 
-An archive is either a Sync.zip or the app's Sync folder itself
+An archive is a Sync.zip, the app's Sync folder itself, or an app snapshot (.fwss, layer Model/*)
 (iCloud: ~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync). Folders are only read.
 """
 import os, zipfile, zlib, math
@@ -47,9 +47,13 @@ def iter_files(path):
                 yield name, fh.read()
         return
     with zipfile.ZipFile(path) as z:
+        # an app snapshot (.fwss) holds three layers; the tracks are Model/* (the others are derived)
+        snapshot = any(n.startswith('Model/*/') for n in z.namelist())
         for info in z.infolist():
             name = info.filename.rsplit('/', 1)[-1]
             if info.is_dir() or '__MACOSX/' in info.filename or not name or name.startswith('.'):
+                continue
+            if snapshot and not info.filename.startswith('Model/*/'):
                 continue
             if decode_filename(name) is None:
                 continue

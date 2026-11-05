@@ -4,7 +4,9 @@ Usage:
     python3 tools/check_export.py ORIGINAL.zip EDITED.zip [--ops data/edits/<name>.json]
 
 Checks (stdlib + numpy):
-  * ORIGINAL / EDITED can each be a Sync.zip or the app's Sync folder
+  * ORIGINAL / EDITED can each be a Sync.zip, the app's Sync folder, or an app snapshot (.fwss)
+  * snapshots: for every changed block, Model/# (index + per-subtile 3-byte counts) and every Model/~ pyramid
+    ancestor (level L pixel = OR of 2x2 pixels of level L-1) must match the edited Model/* exactly
   * every block file in EDITED is well-formed: zlib, index values 1..n contiguous, exact length,
     per-subtile trailer == 2*popcount+1 (big-endian 24-bit), filename == md5/table encoding of its block number
   * blocks not touched by edits are byte-identical to ORIGINAL; a missing block must have been erased to empty
@@ -42,14 +44,100 @@ def blocks(path):
                 out[n] = (f, open(os.path.join(path, f), 'rb').read())
         return out
     with zipfile.ZipFile(path) as z:
+        snapshot = any(n.startswith('Model/*/') for n in z.namelist())
         for i in z.infolist():
             f = i.filename.rsplit('/', 1)[-1]
             if i.is_dir() or '__MACOSX/' in i.filename or not f or f.startswith('.'):
+                continue
+            if snapshot and not i.filename.startswith('Model/*/'):
                 continue
             n = block_no(f)
             if n is not None:
                 out[n] = (f, z.read(i))
     return out
+
+
+def layer_name(n, k):
+    m = n + k
+    return hashlib.md5(str(m).encode()).hexdigest()[:4] + ''.join(T1[int(d)] for d in str(n)) + ''.join(T2[int(c)] for c in '%02d' % (m % 100))
+
+
+def layer_files(path):
+    """{'#': {name: raw}, '~': {name: raw}} of a snapshot zip; None for anything else."""
+    if os.path.isdir(path):
+        return None
+    with zipfile.ZipFile(path) as z:
+        if not any(n.startswith('Model/*/') for n in z.namelist()):
+            return None
+        out = {'#': {}, '~': {}}
+        for i in z.infolist():
+            parts = i.filename.split('/')
+            if len(parts) == 3 and parts[0] == 'Model' and parts[1] in out:
+                out[parts[1]][parts[2]] = z.read(i)
+        return out
+
+
+def inflate(raw):
+    try:
+        return zlib.decompress(raw)
+    except zlib.error:
+        return raw          # Model/# keeps emptied blocks as a bare (uncompressed) zero index
+
+
+def records(d, size, length):
+    """{tile index: bytes} of a block file (records of `size` bytes, first `length` of each)."""
+    idx = np.frombuffer(d[:INDEX_BYTES], '<u2')
+    return {int(t): d[INDEX_BYTES + size * (int(idx[t]) - 1): INDEX_BYTES + size * (int(idx[t]) - 1) + length] for t in np.nonzero(idx)[0]}
+
+
+def check_snapshot(B, layers, touched, errors):
+    """Model/# and Model/~ of the edited snapshot must match its Model/* for every touched block."""
+    ok_hash = 0
+    for n in touched:
+        name = layer_name(n, 74)
+        if name not in layers['#']:
+            errors.append(f'block {n}: Model/#/{name} missing'); continue
+        h = inflate(layers['#'][name])
+        if n in B:
+            d = zlib.decompress(B[n][1])
+            want = {t: r[512:515] for t, r in records(d, REC, REC).items()}
+        else:
+            want = {}
+        got = records(h, 3, 3) if len(h) >= INDEX_BYTES else None
+        if got != want:
+            errors.append(f'block {n}: Model/#/{name} does not match Model/*'); continue
+        ok_hash += 1
+    # pyramid from the edited Model/*: level L subtile (sx, sy) -> 64x64 bool
+    lvl = {}
+    for n, (f, raw) in B.items():
+        d = zlib.decompress(raw)
+        bx, by = n % 512, n // 512
+        for t, r in records(d, REC, 512).items():
+            if any(r):
+                lvl[(bx * 128 + t % 128, by * 128 + t // 128)] = np.unpackbits(np.frombuffer(r, np.uint8)).reshape(64, 64).astype(bool)
+    ok_tilde = 0
+    for L in range(1, 16):
+        nxt = {}
+        for (sx, sy), bm in lvl.items():
+            cur = nxt.setdefault((sx // 2, sy // 2), np.zeros((64, 64), bool))
+            ox, oy = (sx % 2) * 32, (sy % 2) * 32
+            cur[oy:oy + 32, ox:ox + 32] |= bm.reshape(32, 2, 32, 2).any(axis=(1, 3))
+        lvl = {k: v for k, v in nxt.items() if v.any()}
+        for X, Y in sorted({(n % 512 >> L, n // 512 >> L) for n in touched}):
+            g = 2 ** max(0, 9 - L)
+            name = layer_name(Y * g + X, L)
+            want = {(ty * 128 + tx): lvl[(X * 128 + tx, Y * 128 + ty)] for tx in range(128) for ty in range(128) if (X * 128 + tx, Y * 128 + ty) in lvl}
+            if name not in layers['~']:
+                if want:
+                    errors.append(f'level {L} block ({X},{Y}): Model/~/{name} missing')
+                continue
+            got = {t: np.unpackbits(np.frombuffer(r, np.uint8)).reshape(64, 64).astype(bool)
+                   for t, r in records(zlib.decompress(layers['~'][name]), 512, 512).items() if any(r)}
+            if set(got) != set(want) or any(not np.array_equal(got[t], want[t]) for t in want):
+                errors.append(f'level {L} block ({X},{Y}): Model/~/{name} does not match the pyramid of Model/*')
+                continue
+            ok_tilde += 1
+    print(f'snapshot: Model/# ok for {ok_hash}/{len(touched)} changed blocks, Model/~ ok for {ok_tilde} pyramid blocks')
 
 
 def parse(raw, errors, label):
@@ -184,6 +272,9 @@ def main():
         print(f'  block {n} ({n % 512},{n // 512}) removed: erased to empty' + (f' -- but replay leaves {left} px!' if left else ''))
         if left:
             errors.append(f'block {n} missing from export but the edit log leaves {left} px in it')
+    layers = layer_files(os.path.expanduser(a.edited))
+    if layers is not None:
+        check_snapshot(B, layers, changed + created + removed, errors)
     if errors:
         print('FAIL'); [print('  ' + e) for e in errors[:30]]
         sys.exit(1)

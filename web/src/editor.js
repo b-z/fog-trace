@@ -367,18 +367,26 @@
       var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
       return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
     }
+    // 快照沿用 App 的命名：Snapshot-20261004T005208+0900.fwss（导出时刻、本地时区）
+    function snapshotName() {
+      var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
+      var off = -d.getTimezoneOffset(), a = Math.abs(off);
+      return 'Snapshot-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + 'T' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) +
+        (off >= 0 ? '+' : '-') + p(Math.floor(a / 60)) + p(a % 60) + '.fwss';
+    }
     function exportZip() {
       if (tool === 'pen') finishPen(true);
       enqueue(async function () {
         toast(t('e.packing'));
         var res = await store.exportZip('blob'), s = res.summary;
-        var name = 'Sync-edited-' + stamp() + '.zip';
+        var name = store.kind === 'snapshot' ? snapshotName() : 'Sync-edited-' + stamp() + '.zip';
         var a = document.createElement('a');
         a.href = URL.createObjectURL(res.data); a.download = name;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
         exportedPtr = ptr; save();
-        toast(t('e.exportDone', { name: name, changed: s.changed, created: s.created, emptied: s.emptied, copied: s.copied }));
+        toast(t('e.exportDone', { name: name, changed: s.changed, created: s.created, emptied: s.emptied, copied: s.copied }) +
+              (s.snapshot ? t('e.exportSnap', { hash: s.snapshot.hash, tilde: s.snapshot.tilde }) : ''), s.snapshot ? 9000 : undefined);
       });
     }
 

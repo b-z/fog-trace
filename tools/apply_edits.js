@@ -6,6 +6,7 @@ globalThis.JSZip = require(path.join(root, 'web/vendor/jszip.min.js'));
 require(path.join(root, 'web/src/decoder.js'));
 require(path.join(root, 'web/src/geo.js'));
 require(path.join(root, 'web/src/fog-store.js'));
+require(path.join(root, 'web/src/snapshot.js'));
 
 (async () => {
   const [zipPath, editsPath, outPath] = process.argv.slice(2);

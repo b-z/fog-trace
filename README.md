@@ -20,13 +20,15 @@ It is a static web page. Your archive is read and processed only in your browser
 
 ## How to use
 
-1. Open [fog-trace.pages.dev](https://fog-trace.pages.dev/) and choose the app's `Sync` folder, or a zip of it (you can also drop it on the page).
+1. Open [fog-trace.pages.dev](https://fog-trace.pages.dev/) and choose the app's `Sync` folder, a zip of it, or an app snapshot (`.fwss`). You can also drop it on the page.
 2. Dead ends are detected automatically: a few seconds for a whole archive. Red points on the map are the ones to review.
 3. Review from the highest confidence down: `J` / `K` next / previous, `X` ignore, `D` fixed, `U` undo. Reviewed points turn gray.
 4. Fix what needs fixing with the tools above the map: the eraser for GPS glitches, the pen for missing roads. Then click "Re-detect"; only the areas you changed are computed again (well under a second).
-5. Click "Export archive" to download `Sync-edited-….zip` and import it back into the app.
+5. Click "Export archive" to download `Sync-edited-….zip` (or, for a snapshot, a new `Snapshot-….fwss`) and import it back into the app.
 
 **Where the archive is.** With sync turned on, the app keeps your data in a `Sync` folder (one file per map area). With iCloud on a Mac it is `~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync`: in the file dialog press `⌘⇧G` and paste the path. Files that are still only in iCloud must be downloaded in Finder first. With Dropbox it is the `Sync` folder inside the app's Dropbox folder.
+
+**Snapshots.** If you use the app's snapshots instead of sync, open a `.fwss` file: they are in `Databases/<name>.fwdb/Snapshots/<year>/<month>/` in the same app folder. A snapshot holds the tracks plus two layers derived from them (per-subtile counts and a zoom pyramid); when you export an edited snapshot, both are recomputed for every block you changed, so the snapshot stays consistent.
 
 The page is available in English, Chinese and Japanese (switch at the top right).
 
@@ -80,7 +82,7 @@ The "Archive & marks" menu can **export marks** as JSON (backup, or moving to an
 | `deadends.py` | Python reference implementation of the detector (numpy + scipy + scikit-image). Its JSON output can be imported in the page with "Import marks" |
 | `detect_node.js` | Runs the page's detector in Node (the same `web/src/detect-core.js`) |
 | `compare_raw.py` | Compares the two detectors' results field by field |
-| `check_export.py` | Checks an exported archive: format of every block, unchanged blocks byte-identical, and with `--ops` an independent pixel-by-pixel replay of the edit log |
+| `check_export.py` | Checks an exported archive (zip, folder or snapshot): format of every block, unchanged blocks byte-identical, the derived layers of a snapshot, and with `--ops` an independent pixel-by-pixel replay of the edit log |
 | `apply_edits.js` | Applies an edit log to an archive without a browser (same code as the page) |
 | `store_selftest.js` | Self-test of the storage layer: file names, no-op re-encoding, real edits |
 

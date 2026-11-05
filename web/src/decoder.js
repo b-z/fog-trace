@@ -72,12 +72,15 @@
     var zip = await JSZip.loadAsync(arrayBuffer);
     var entries = [];
     var byBlockNo = {}; // blockNo -> path
+    // App 快照（.fwss）：Model/* 是轨迹，Model/# 和 Model/~ 是派生图层（导出时由 snapshot.js 同步更新）
+    var snapshot = false;
+    zip.forEach(function (path, file) { if (!file.dir && path.indexOf('Model/*/') === 0) snapshot = true; });
     zip.forEach(function (path, file) {
       // 只取真实 block 文件（跳过目录、隐藏文件；macOS 副本名如 "xxx 2" 保留并归一化）
       if (file.dir) return;
       var name = path.replace(/^.*\//, '');
       if (!name || name.charAt(0) === '.') return;
-      var loc = decodeFilename(name);
+      var loc = !snapshot || path.indexOf('Model/*/') === 0 ? decodeFilename(name) : null;
       var e = {
         path: path, name: name,
         size: file._data ? file._data.uncompressedSize : 0,
@@ -100,6 +103,8 @@
     }
 
     return {
+      kind: snapshot ? 'snapshot' : 'sync',
+      fileDate: function (path) { var f = zip.file(path); return f ? f.date : null; },
       entries: entries,
       byBlockNo: byBlockNo,
       pathForBlock: function (blockNo) { return byBlockNo[blockNo]; },

@@ -183,6 +183,8 @@
     return Array.from(out.values());
   }
 
+  var SNAP_DATE = new Date(Date.UTC(1980, 0, 1));
+
   // ---------- 存档 ----------
   function createStore(archive) {
     var loading = new Map();   // blockNo -> Promise<BlockState|null>
@@ -316,6 +318,16 @@
       return archive.entries.filter(function (e) { return e.blockNo === blockNo; });
     }
 
+    // 载入全部区块（含编辑后新建的），返回 BlockState 数组：检测、快照导出用
+    async function loadAll(onProgress) {
+      var nos = Object.keys(archive.byBlockNo).map(Number);
+      for (var i = 0; i < nos.length; i++) {
+        await load(nos[i]);
+        if (onProgress && i % 20 === 0) onProgress(i, nos.length);
+      }
+      return Array.from(loaded.values());
+    }
+
     // 导出：返回 { blob(或 uint8array), summary }
     async function exportZip(type) {
       var JSZipCtor = global.JSZip, out = new JSZipCtor();
@@ -324,12 +336,34 @@
       var dirtyNos = new Set(dirty.map(function (s) { return s.blockNo; }));
       var prefix = 'Sync/';
       archive.entries.forEach(function (e) { if (e.blockNo !== null) prefix = e.path.slice(0, e.path.length - e.name.length); });
-      var copied = 0, summary = { changed: 0, created: 0, emptied: 0, copied: 0, skipped: [] };
+      var copied = 0, summary = { changed: 0, created: 0, emptied: 0, copied: 0, skipped: [], snapshot: null };
+      // App 快照（.fwss）：Model/# 统计和 Model/~ 缩放金字塔要跟着改（src/snapshot.js）
+      var derived = new Map();
+      if (archive.kind === 'snapshot' && dirty.length) {
+        var d = await global.FogSnapshot.derive(await loadAll(), dirty, archive);
+        derived = d.files; summary.snapshot = d.stats;
+      }
+      var snap = archive.kind === 'snapshot';
+      function opts(path) {   // 保留原文件的时间戳；快照里没有目录条目，也不加
+        // 快照里 App 写的是全 0 的时间（读出来不是合法日期），统一写 1980-01-01
+        var t = snap ? SNAP_DATE : archive.fileDate ? archive.fileDate(path) : null, o = { binary: true, createFolders: !snap };
+        if (t) o.date = t;
+        return o;
+      }
       for (var k = 0; k < archive.entries.length; k++) {
         var e = archive.entries[k];
         if (/(^|\/)__MACOSX\//.test(e.path)) { summary.skipped.push(e.path); continue; }
-        if (e.blockNo !== null && dirtyNos.has(e.blockNo)) continue;   // 改过的区块下面重写
-        out.file(e.path, await archive.rawBytes(e.path), { binary: true });
+        if (e.blockNo !== null && dirtyNos.has(e.blockNo)) {            // 改过的区块：原位置写新内容（擦空的不写）
+          var cur = loaded.get(e.blockNo);
+          if (e.path === cur.path && cur.tiles.size) out.file(e.path, await deflateZlib(cur.encode()), opts(e.path));
+          continue;
+        }
+        if (derived.has(e.path)) {                                     // 快照的派生图层：换成新内容（null = 删掉）
+          var v = derived.get(e.path); derived.delete(e.path);
+          if (v) out.file(e.path, v, opts(e.path));
+          continue;
+        }
+        out.file(e.path, await archive.rawBytes(e.path), opts(e.path));
         copied++;
       }
       summary.copied = copied;
@@ -338,11 +372,12 @@
         var path = st.path || (prefix + blockFilename(st.blockNo));
         // 整块擦空：不写这个文件（与 App 同步文件夹里看到的一致：被擦空的区块，文件直接没有了）
         if (!st.tiles.size) { if (st.path) summary.emptied++; continue; }
-        out.file(path, await deflateZlib(st.encode()), { binary: true });
+        if (!st.path) out.file(path, await deflateZlib(st.encode()), opts(path));   // 新区块接在最后；改过的已在原位置写好
         if (!st.path) summary.created++;
         else summary.changed++;
         if (st.path && blocksOf(st.blockNo).length > 1) summary.skipped.push('(重复副本) ' + st.blockNo);
       }
+      derived.forEach(function (v, path) { if (v) out.file(path, v, opts(path)); });   // 新出现的派生文件
       var data = await out.generateAsync({ type: type || 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
       return { data: data, summary: summary };
     }
@@ -351,15 +386,8 @@
       load: load,                 // 渲染用：Promise<BlockState|null>
       getBlock: load,
       peek: function (blockNo) { return loaded.get(blockNo) || null; },   // 同步：已载入的区块（吸附用）
-      // 载入全部区块（含编辑后新建的），返回 BlockState 数组：检测用
-      loadAll: async function (onProgress) {
-        var nos = Object.keys(archive.byBlockNo).map(Number);
-        for (var i = 0; i < nos.length; i++) {
-          await load(nos[i]);
-          if (onProgress && i % 20 === 0) onProgress(i, nos.length);
-        }
-        return Array.from(loaded.values());
-      },
+      loadAll: loadAll,
+      kind: archive.kind || 'sync',   // 'snapshot' = App 快照（.fwss）
       applyOp: applyOp,
       applyDiff: applyDiff,
       newDiff: newDiff,

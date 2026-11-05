@@ -20,13 +20,15 @@ Fog Trace 读取 [世界迷雾 (Fog of World)](https://fogofworld.app) 的数据
 
 ## 怎么用
 
-1. 打开 [fog-trace.pages.dev](https://fog-trace.pages.dev/)，选择 App 的 `Sync` 文件夹，或者它压缩成的 zip（也可以直接拖进页面）。
+1. 打开 [fog-trace.pages.dev](https://fog-trace.pages.dev/)，选择 App 的 `Sync` 文件夹、它压缩成的 zip，或者 App 的快照（`.fwss`）。也可以直接拖进页面。
 2. 自动检测断点，整份存档几秒钟。地图上的红点就是待处理的断点。
 3. 按置信度从高到低复查：`J` / `K` 下一个 / 上一个，`X` 不需要处理，`D` 已处理，`U` 撤销。标过的点变成灰色。
 4. 需要修的地方用地图上方的工具改：橡皮擦擦掉 GPS 飘线，画笔补上缺的路。改完点「重新检测」，只重算改过的区域（不到一秒）。
-5. 点「导出存档」下载 `Sync-edited-….zip`，再导回 App。
+5. 点「导出存档」下载 `Sync-edited-….zip`（打开的是快照时，导出新的 `Snapshot-….fwss`），再导回 App。
 
 **存档在哪里。** App 开启同步后，数据在同步目录的 `Sync` 文件夹里（每个文件是一块地图区域）。iCloud 同步的 Mac 上在 `~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync`：在文件选择窗口里按 `⌘⇧G` 粘贴路径。还只在 iCloud 云端的文件要先在 Finder 里下载。Dropbox 同步的在 Dropbox 里 App 文件夹下的 `Sync`。
+
+**快照。** 不用同步、只用 App 快照的话，直接打开 `.fwss` 文件，它们在同一个 App 文件夹的 `Databases/<名字>.fwdb/Snapshots/<年>/<月>/` 里。快照里除了轨迹，还有两层由轨迹算出来的数据（每个子瓦片的像素数，和一套缩放金字塔）；导出编辑过的快照时，改过的区块对应的这两层都会重新计算，快照保持一致。
 
 网页支持中文、English、日本語，右上角切换。
 
@@ -80,7 +82,7 @@ Fog Trace 读取 [世界迷雾 (Fog of World)](https://fogofworld.app) 的数据
 | `deadends.py` | 检测的 Python 参考实现（numpy + scipy + scikit-image），输出的 JSON 可以在网页里「导入标记」 |
 | `detect_node.js` | 在 Node 里跑网页版的检测（同一份 `web/src/detect-core.js`） |
 | `compare_raw.py` | 逐字段比对两边的检测结果 |
-| `check_export.py` | 校验导出的存档：每个区块的格式、未改区块逐字节一致；带 `--ops` 时独立重放编辑记录逐像素比对 |
+| `check_export.py` | 校验导出的存档（zip、文件夹或快照）：每个区块的格式、未改区块逐字节一致、快照的两层派生数据；带 `--ops` 时独立重放编辑记录逐像素比对 |
 | `apply_edits.js` | 不开浏览器，把编辑记录套到存档上导出（与网页同一套代码） |
 | `store_selftest.js` | 存储层自测：文件名、无改动重新编码、真实编辑 |
 
