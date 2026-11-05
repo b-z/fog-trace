@@ -636,6 +636,9 @@
     if (state.source !== label) detect();
   }
 
+  // iOS 的文件选择器按 accept 过滤，不认识 .fwss，快照会变灰选不了：iOS 上不加过滤，打开后再检查格式
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) $('f-zip').removeAttribute('accept');
   $('w-zip').onclick = function () { $('f-zip').click(); };
   $('w-dir').onclick = function () { $('f-dir').click(); };
   $('w-close').onclick = function () { showWelcome(false); };
