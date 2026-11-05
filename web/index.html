@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>迷雾轨迹 · 断头复查</title>
-<meta name="description" content="在浏览器里打开《世界迷雾》(Fog of World) 的同步存档：找出轨迹断头、标记复查、擦除和补线，导出改好的存档。数据不离开本机。">
+<title>Fog Trace</title>
+<meta name="description" content="Open your Fog of World archive in the browser: find where tracks break off, review them, erase GPS glitches, fill in missing roads and export the fixed archive. Your data never leaves your device.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='none' stroke='%2350dc8c' stroke-width='2.5'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="vendor/leaflet.css">
 <style>
@@ -23,7 +23,7 @@
   .tabs button.on { background: #262626; color: var(--text); }
   .tabs b { font-weight: 600; margin-left: 4px; }
   #bar label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  #status { color: var(--muted); font-size: 12px; margin-left: auto; min-width: 0; }
+  #status { color: var(--muted); font-size: 12px; flex: 1 1 80px; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #status.warn { color: var(--accent); }
   .barbtn { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: #1e1e1e; color: var(--text); cursor: pointer; white-space: nowrap; }
   .barbtn:hover:not(:disabled) { background: #262626; }
@@ -35,6 +35,25 @@
   .menu .pop button, .menu .pop a { display: block; width: 100%; text-align: left; font: inherit; font-size: 12px; background: none; border: 0; color: var(--text); padding: 6px 10px; border-radius: 4px; cursor: pointer; text-decoration: none; }
   .menu .pop button:hover, .menu .pop a:hover { background: #2a2a2a; }
   .menu .pop hr { border: 0; border-top: 1px solid #2a2a2a; margin: 4px 0; }
+  .links-right { display: flex; gap: 8px; align-items: center; }
+  .barsel { font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: #1e1e1e; color: var(--text); cursor: pointer; }
+  .iconbtn { display: inline-flex; gap: 6px; align-items: center; text-decoration: none; }
+  .barbtn.sponsor { border-color: #6d2f55; color: #f6a8d3; }
+  .barbtn.sponsor:hover { background: #2a1822; }
+  .heart { color: #ea4aaa; }
+  /* 赞助 */
+  .modal { position: fixed; inset: 0; z-index: 2100; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.62); }
+  .modal.show { display: flex; }
+  .modal .box { position: relative; max-width: 460px; width: 100%; background: #161616; border: 1px solid #2c2c2c; border-radius: 12px; padding: 22px 24px; }
+  .modal h2 { margin: 0 0 8px; font-size: 17px; font-weight: 650; }
+  .modal p { color: #bbb; margin: 0 0 18px; }
+  .modal .close { position: absolute; top: 8px; right: 12px; background: none; border: 0; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; }
+  .sp-row { display: flex; gap: 22px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .sp-gh { display: inline-flex; gap: 6px; align-items: center; padding: 9px 16px; border-radius: 8px; border: 1px solid #6d2f55; background: #24131d; color: #f6a8d3; text-decoration: none; font-size: 14px; }
+  .sp-gh:hover { background: #31192a; }
+  .sp-row figure { margin: 0; text-align: center; }
+  .sp-row img { display: block; width: 180px; height: 180px; border-radius: 8px; background: #fff; margin: 0 auto; }
+  .sp-row figcaption { color: var(--muted); font-size: 12px; margin-top: 6px; }
   #list .row.absent { opacity: .45; }
   .absent-note { color: var(--accent); }
   #mapwrap { position: relative; min-height: 0; }
@@ -111,7 +130,7 @@
   @media (max-width: 760px) {
     #app { grid-template-columns: 1fr; grid-template-rows: auto 55vh 1fr; }
     #bar { grid-column: 1; padding: 8px 12px; gap: 8px; }
-    #status { margin-left: 0; width: 100%; order: 10; }
+    #status { flex-basis: 100%; order: 10; text-align: left; white-space: normal; }
     #side { border-left: 0; border-top: 1px solid var(--line); }
   }
 </style>
@@ -119,62 +138,79 @@
 <body>
 <div id="app">
   <div id="bar">
-    <h1>断头复查</h1>
+    <h1 data-i18n="bar.title"></h1>
     <div class="tabs" id="tabs">
-      <button data-f="open" class="on">待处理<b id="n-open">0</b></button>
-      <button data-f="ignored">不需要处理<b id="n-ignored">0</b></button>
-      <button data-f="done">已处理<b id="n-done">0</b></button>
-      <button data-f="all">全部<b id="n-all">0</b></button>
+      <button data-f="open" class="on"><span data-i18n="tab.open"></span><b id="n-open">0</b></button>
+      <button data-f="ignored"><span data-i18n="tab.ignored"></span><b id="n-ignored">0</b></button>
+      <button data-f="done"><span data-i18n="tab.done"></span><b id="n-done">0</b></button>
+      <button data-f="all"><span data-i18n="tab.all"></span><b id="n-all">0</b></button>
     </div>
-    <label>最低分 <input id="minScore" type="range" min="0" max="90" step="5" value="0" style="width:110px"> <b id="minScoreV">0</b></label>
+    <label><span data-i18n="bar.minScore"></span> <input id="minScore" type="range" min="0" max="90" step="5" value="0" style="width:110px"> <b id="minScoreV">0</b></label>
     <span id="status"></span>
-    <button class="barbtn" id="b-detect" disabled title="检测当前存档（含编辑）的断头；窗口内容没变的直接用上次的结果">检测</button>
+    <button class="barbtn" id="b-detect" disabled data-i18n-title="bar.detectTitle"></button>
     <div class="menu" id="menu">
-      <button class="barbtn" id="b-menu">存档与标记 ▾</button>
+      <button class="barbtn" id="b-menu" data-i18n="bar.menu"></button>
       <div class="pop">
-        <button id="m-open">打开别的存档…</button>
+        <button id="m-open" data-i18n="menu.open"></button>
         <hr>
-        <button id="m-export">导出标记（备份 / 换设备）</button>
-        <button id="m-import">导入标记…</button>
-        <hr>
-        <a href="https://github.com/b-z/fog-trace" target="_blank" rel="noopener">源码与说明 ↗</a>
+        <button id="m-export" data-i18n="menu.export"></button>
+        <button id="m-import" data-i18n="menu.import"></button>
       </div>
+    </div>
+    <div class="links-right">
+      <select id="lang" class="barsel" data-i18n-title="bar.lang" data-i18n-aria="bar.lang"></select>
+      <a class="barbtn iconbtn" href="https://github.com/b-z/fog-trace" target="_blank" rel="noopener" data-i18n-title="bar.github" data-i18n-aria="bar.github">
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span>GitHub</span></a>
+      <button class="barbtn sponsor" id="b-sponsor"><span class="heart" aria-hidden="true">♥</span> <span data-i18n="bar.sponsor"></span></button>
     </div>
   </div>
   <div id="mapwrap">
     <div id="map"></div>
     <div id="welcome">
       <div class="box">
-        <button class="close" id="w-close" title="关闭" hidden>×</button>
-        <h2>打开《世界迷雾》存档</h2>
-        <p>找出轨迹里断开的地方（断头），逐个复查标记；也能擦掉 GPS 飘出去的线、补上缺的路，再导出成 App 能导入的存档。</p>
+        <button class="close" id="w-close" data-i18n-title="sp.close" data-i18n-aria="sp.close" hidden>×</button>
+        <h2 data-i18n="w.title"></h2>
+        <p data-i18n="w.intro"></p>
         <div class="pick">
-          <button id="w-zip">选择 Sync.zip</button>
-          <button id="w-dir" class="sec">选择 Sync 文件夹</button>
+          <button id="w-zip" data-i18n="w.zip"></button>
+          <button id="w-dir" class="sec" data-i18n="w.dir"></button>
         </div>
-        <div class="drop">或者把 zip / Sync 文件夹拖到这里</div>
+        <div class="drop" data-i18n="w.drop"></div>
         <div class="err" id="w-err"></div>
         <details>
-          <summary>存档在哪里？</summary>
-          <p>App 开启同步后，存档是同步目录里的 <code>Sync</code> 文件夹（每个文件是一块地图区域）。整个文件夹选中即可，或者先压缩成 zip。</p>
-          <p>iCloud 同步的 Mac：<code>~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync</code>。选择窗口里按 <kbd>⌘⇧G</kbd> 粘贴这个路径。文件如果还在云端（图标带云朵），先在 Finder 里下载。</p>
-          <p>Dropbox 同步：Dropbox 里 App 的文件夹下的 <code>Sync</code>。</p>
+          <summary data-i18n="w.where"></summary>
+          <p data-i18n-html="w.where1"></p>
+          <p data-i18n-html="w.where2"></p>
+          <p data-i18n-html="w.where3"></p>
         </details>
-        <p class="privacy">存档只在你的浏览器里读取和处理，不会上传到任何地方。标记和编辑记录也只存在这个浏览器里（可在「存档与标记」里导出备份）。</p>
+        <p class="privacy" data-i18n="w.privacy"></p>
       </div>
     </div>
   </div>
   <div id="side">
     <div id="card"></div>
-    <div id="listhead"><span id="listcount"></span><span>按置信度排序</span></div>
+    <div id="listhead"><span id="listcount"></span><span data-i18n="list.sort"></span></div>
     <div id="list"></div>
   </div>
 </div>
 <div id="toast"></div>
+<div id="sponsor" class="modal" role="dialog" aria-modal="true" aria-labelledby="sp-title">
+  <div class="box">
+    <button class="close" id="sp-close" data-i18n-title="sp.close" data-i18n-aria="sp.close">×</button>
+    <h2 id="sp-title" data-i18n="sp.title"></h2>
+    <p data-i18n="sp.text"></p>
+    <div class="sp-row">
+      <a class="sp-gh" href="https://github.com/sponsors/b-z" target="_blank" rel="noopener"><span class="heart" aria-hidden="true">♥</span> <span data-i18n="sp.github"></span></a>
+      <figure><img src="img/wechat-reward.jpg" width="180" height="180" alt="WeChat"><figcaption data-i18n="sp.wechat"></figcaption></figure>
+    </div>
+  </div>
+</div>
 <input type="file" id="f-zip" accept=".zip,application/zip" hidden>
 <input type="file" id="f-dir" webkitdirectory hidden>
 <input type="file" id="f-marks" accept=".json,application/json" hidden>
 
+<script src="src/i18n.js"></script>
 <script src="vendor/leaflet.js"></script>
 <script src="vendor/jszip.min.js"></script>
 <script src="src/decoder.js"></script>
@@ -190,8 +226,11 @@
   'use strict';
   // 底图：换成别的瓦片服务只改这里
   var BASEMAP = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 };
-  var KIND = { junction: '支线断头', end: '孤立线段端点', dot: '孤立点' };
-  var STATUS = { open: '待处理', ignored: '不需要处理', done: '已处理' };
+  var t = FogI18n.t;
+  FogI18n.apply();
+  document.title = t('doc.title');
+  var KIND = { junction: t('kind.junction'), end: t('kind.end'), dot: t('kind.dot') };
+  var STATUS = { open: t('tab.open'), ignored: t('tab.ignored'), done: t('tab.done') };
   var COLOR = { open: '#ff6b5b', ignored: '#8a8a8a', done: '#8a8a8a' };   // 标过的（不需要处理 / 已处理）都是灰色
   var $ = function (id) { return document.getElementById(id); };
 
@@ -223,28 +262,31 @@
   function renderStatus() {
     var el = $('status'), warn = false, s;
     if (busyText) s = busyText;
-    else if (!label) s = '还没打开存档';
-    else if (!state.source) { s = label + ' · 还没检测断头'; warn = true; }
-    else if (state.source !== label) { s = '⚠ 标记来自 ' + state.source + '，当前是 ' + label + '：点「检测」（标记会自动沿用）'; warn = true; }
+    else if (!label) s = t('s.noArchive');
+    else if (!state.source) { s = t('s.notDetected', { a: label }); warn = true; }
+    else if (state.source !== label) { s = t('s.stale', { src: state.source, a: label }); warn = true; }
     else {
-      s = label + ' · 检测于 ' + (state.updated || '').slice(0, 10);
-      if ((state.edits || 0) !== editPtr) { s += ' · 编辑后还没重新检测'; warn = true; }
+      s = t('s.detected', { a: label, d: (state.updated || '').slice(0, 10) });
+      if ((state.edits || 0) !== editPtr) { s += t('s.editedSince'); warn = true; }
     }
-    el.textContent = s;
+    el.textContent = s; el.title = s;
     el.classList.toggle('warn', warn);
     $('b-detect').disabled = !store || detecting;
     $('b-detect').classList.toggle('primary', !!store && !detecting && (state.source !== label || (state.edits || 0) !== editPtr));
-    $('b-detect').textContent = detecting ? '检测中…' : state.source === label ? '重新检测' : '检测';
+    $('b-detect').textContent = detecting ? t('bar.detecting') : state.source === label ? t('bar.redetect') : t('bar.detect');
   }
   function busy(t) { busyText = t || ''; renderStatus(); }
 
   // ---------- 标记状态的保存（合并连续的改动，300ms 后写一次） ----------
-  var saveTimer = null, saveChain = Promise.resolve();
+  var saveTimer = null, saveChain = Promise.resolve(), pendingSave = false;
+  function flushSave() { return pendingSave ? saveState(true) : saveChain; }
   function saveState(now) {
     clearTimeout(saveTimer);
+    pendingSave = true;
     var run = function () {
+      pendingSave = false;
       saveChain = saveChain.then(function () { return FogDB.set('state', state); }).catch(function (e) {
-        if (storageOk) toast('标记保存失败（浏览器不允许本地存储？）：' + e.message, 5000);
+        if (storageOk) toast(t('t.saveFail', { e: e.message }), 5000);
         storageOk = false;
       });
       return saveChain;
@@ -309,7 +351,7 @@
 
   function renderList() {
     var list = $('list'); list.innerHTML = '';
-    $('listcount').textContent = view.length + ' 处';
+    $('listcount').textContent = t('list.count', { n: view.length });
     var frag = document.createDocumentFragment();
     view.forEach(function (p, i) {
       var d = document.createElement('div');
@@ -329,36 +371,36 @@
     var i = idx(), card = $('card');
     var p = i >= 0 ? view[i] : byId[curId];   // 在地图上点了不在当前列表里的点（比如灰点）也显示
     if (!p) {
-      card.innerHTML = '<div id="empty">' + (!label ? '先打开一个存档。' : !points.length ? '还没有检测结果：点上方的「检测」。' : view.length ? '从列表里选一处。' :
-        filter === 'open' && minScore === 0 ? '待处理的都处理完了。' : '这个筛选下没有点。') + '</div>';
+      card.innerHTML = '<div id="empty">' + esc(!label ? t('card.noArchive') : !points.length ? t('card.noResult') : view.length ? t('card.pick') :
+        filter === 'open' && minScore === 0 ? t('card.allDone') : t('card.empty')) + '</div>';
       focus.clearLayers();
       return;
     }
     card.innerHTML =
-      '<div class="rank"><span>' + (i >= 0 ? '#' + (i + 1) + ' / ' + view.length : '不在当前列表') + '</span><span class="pill s-' + p.status + '">' + STATUS[p.status] + '</span></div>' +
-      '<div class="score"><b>' + Math.round(p.score) + '</b><span>置信度 · ' + KIND[p.kind] + '</span></div>' +
+      '<div class="rank"><span>' + (i >= 0 ? '#' + (i + 1) + ' / ' + view.length : esc(t('card.notInList'))) + '</span><span class="pill s-' + p.status + '">' + STATUS[p.status] + '</span></div>' +
+      '<div class="score"><b>' + Math.round(p.score) + '</b><span>' + esc(t('card.confidence')) + ' · ' + KIND[p.kind] + '</span></div>' +
       '<div class="meter"><i style="width:' + p.score + '%"></i></div>' +
       '<dl>' +
-      '<dt>突出长度</dt><dd>' + p.length_m + ' m</dd>' +
-      '<dt>前方空旷</dt><dd>' + p.forward_m + ' m' + (p.forward_px >= 99 ? '+' : '') + '</dd>' +
-      '<dt>离别的轨迹</dt><dd>' + p.touch_m + ' m' + (p.touch_px >= 99 ? '+' : '') + '</dd>' +
-      '<dt>坐标</dt><dd>' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) + '</dd>' +
-      (p.status !== 'open' ? '<dt>标记</dt><dd>' + esc((p.marked_at || '').slice(0, 10)) + (p.marked_in ? ' · ' + esc(p.marked_in) : '') + '</dd>' : '') +
-      (p.present === false ? '<dt>本存档</dt><dd class="absent-note">没检测到这个断头（已修好，或标记来自别的存档）</dd>' : '') +
+      '<dt>' + t('card.length') + '</dt><dd>' + p.length_m + ' m</dd>' +
+      '<dt>' + t('card.forward') + '</dt><dd>' + p.forward_m + ' m' + (p.forward_px >= 99 ? '+' : '') + '</dd>' +
+      '<dt>' + t('card.touch') + '</dt><dd>' + p.touch_m + ' m' + (p.touch_px >= 99 ? '+' : '') + '</dd>' +
+      '<dt>' + t('card.coords') + '</dt><dd>' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) + '</dd>' +
+      (p.status !== 'open' ? '<dt>' + t('card.marked') + '</dt><dd>' + esc((p.marked_at || '').slice(0, 10)) + (p.marked_in ? ' · ' + esc(p.marked_in) : '') + '</dd>' : '') +
+      (p.present === false ? '<dt>' + t('card.here') + '</dt><dd class="absent-note">' + t('card.absent') + '</dd>' : '') +
       '<dt>ID</dt><dd title="' + esc(p.id) + '">' + esc(String(p.id).slice(0, 8)) + '</dd>' +
       '</dl>' +
       '<div class="actions">' +
-      '<button class="ign" id="b-ign"' + (p.status === 'ignored' ? ' disabled' : '') + '>不需要处理<kbd>X</kbd></button>' +
-      '<button class="done" id="b-done"' + (p.status === 'done' ? ' disabled' : '') + '>已处理<kbd>D</kbd></button>' +
+      '<button class="ign" id="b-ign"' + (p.status === 'ignored' ? ' disabled' : '') + '>' + t('card.ignore') + '<kbd>X</kbd></button>' +
+      '<button class="done" id="b-done"' + (p.status === 'done' ? ' disabled' : '') + '>' + t('card.done') + '<kbd>D</kbd></button>' +
       '</div>' +
       '<div class="nav">' +
-      '<button id="b-prev">上一个<kbd>K</kbd></button>' +
-      '<button id="b-open"' + (p.status === 'open' ? ' disabled' : '') + '>恢复待处理<kbd>U</kbd></button>' +
-      '<button id="b-next">下一个<kbd>J</kbd></button>' +
+      '<button id="b-prev">' + t('card.prev') + '<kbd>K</kbd></button>' +
+      '<button id="b-open"' + (p.status === 'open' ? ' disabled' : '') + '>' + t('card.reopen') + '<kbd>U</kbd></button>' +
+      '<button id="b-next">' + t('card.next') + '<kbd>J</kbd></button>' +
       '</div>' +
-      '<div class="links"><a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng + '">Google 地图</a>' +
+      '<div class="links"><a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng + '">' + t('card.gmaps') + '</a>' +
       '<a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=' + p.lat + '&mlon=' + p.lng + '#map=17/' + p.lat + '/' + p.lng + '">OSM</a>' +
-      '<a href="#" id="b-recenter">回到该点</a></div>';
+      '<a href="#" id="b-recenter">' + t('card.center') + '</a></div>';
     $('b-ign').onclick = function () { mark('ignored'); };
     $('b-done').onclick = function () { mark('done'); };
     $('b-open').onclick = function () { mark('open'); };
@@ -419,7 +461,7 @@
     var i = idx(), snap = snapshot([p]);
     setStatus(p, status);
     lastMarked = { id: id, prev: snap[0].status };
-    toast(status === 'open' ? '已恢复为待处理' : '已标记为「' + STATUS[status] + '」 · 按 U 撤销');
+    toast(status === 'open' ? t('t.reopened') : t('t.marked', { s: STATUS[status] }));
     refresh(i, [p]);
     saveState();
   }
@@ -439,7 +481,7 @@
       restore(snap);
       refresh(undefined, snap.map(function (s) { return s.p; }));
       saveState();
-      toast('已撤销框选：' + snap.length + ' 处恢复原状');
+      toast(t('t.boxUndone', { n: snap.length }));
       return;
     }
     var p = curId && byId[curId];
@@ -478,8 +520,8 @@
     detecting = true; renderStatus();
     var pool = null, t0 = Date.now();
     try {
-      busy('读取全部区块…');
-      var blocks = await store.loadAll(function (i, n) { busy('读取区块 ' + i + ' / ' + n); });
+      busy(t('d.reading'));
+      var blocks = await store.loadAll(function (i, n) { busy(t('d.readingN', { i: i, n: n })); });
       var saved = null;
       try { saved = await FogDB.get('detcache'); } catch (e) { /* 没有缓存也能检测 */ }
       var cache = FogDetect.memoryCache(saved);
@@ -487,7 +529,7 @@
       var r = await FogDetect.run({
         blocks: blocks, pool: pool, cache: cache,
         onProgress: function (done, total, info) {
-          busy('检测断头：' + done + ' / ' + total + ' 个窗口 · ' + Math.round(info.seconds) + ' 秒' + (info.reused ? '（' + info.reused + ' 个没变，直接沿用）' : ''));
+          busy(t('d.progress', { d: done, t: total, s: Math.round(info.seconds) }) + (info.reused ? t('d.reused', { n: info.reused }) : ''));
         },
       });
       var m = FogDetect.merge(state, r.dets, label, { edits: editPtr });
@@ -497,11 +539,11 @@
       busy('');
       refresh(0);
       var s = m.summary;
-      toast('检测完成：' + r.dets.length + ' 处断头 · 新 ' + s.fresh + ' · 修好 ' + s.gone + ' · 沿用标记 ' + s.carried +
-            (s.missing ? ' · ' + s.missing + ' 个标记本存档没检测到' : '') + ' · ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒', 7000);
+      toast(t('d.done', { n: r.dets.length, fresh: s.fresh, gone: s.gone, carried: s.carried }) +
+            (s.missing ? t('d.missing', { n: s.missing }) : '') + t('d.secs', { s: ((Date.now() - t0) / 1000).toFixed(1) }), 7000);
     } catch (e) {
       console.error(e);
-      busy('检测失败：' + e.message);
+      busy(t('d.failed', { e: e.message }));
     } finally {
       if (pool) pool.terminate();
       detecting = false; renderStatus();
@@ -527,8 +569,8 @@
       z.file('Sync/' + name, await f.arrayBuffer(), { binary: true });
       n++;
     }
-    if (!n) throw new Error(cloud ? '这个文件夹里的 ' + cloud + ' 个区块都还在 iCloud 云端：先在 Finder 里下载' : '「' + folder + '」里没有世界迷雾的区块文件');
-    if (cloud) toast('有 ' + cloud + ' 个区块还在 iCloud 云端没下载，这次没读到它们', 8000);
+    if (!n) throw new Error(cloud ? t('o.cloudAll', { n: cloud }) : t('o.noBlocks', { f: folder }));
+    if (cloud) toast(t('o.cloudSome', { n: cloud }), 8000);
     return z.generateAsync({ type: 'blob', compression: 'STORE' });
   }
 
@@ -537,12 +579,12 @@
     var test;
     try {
       test = await FogDecoder.open(await blob.arrayBuffer());
-    } catch (e) { welcomeError('打不开这个文件：' + e.message); return; }
-    if (!test.entries.some(function (e) { return e.blockNo !== null; })) { welcomeError('这不是世界迷雾的同步存档（里面没有区块文件）'); return; }
+    } catch (e) { welcomeError(t('o.cantOpen', { e: e.message })); return; }
+    if (!test.entries.some(function (e) { return e.blockNo !== null; })) { welcomeError(t('o.notArchive')); return; }
     var saved = false;
     try { await FogDB.set('archive', { name: name, blob: blob, size: blob.size, saved: FogDetect.nowIso() }); saved = true; } catch (e) { /* 存不下：只在这次会话里打开 */ }
     if (archive && saved) { location.reload(); return; }   // 已经开着一个：刷新，干净地换成新的
-    if (archive) { welcomeError('浏览器不允许本地存储，没法切换存档；刷新页面后再选'); return; }
+    if (archive) { welcomeError(t('o.noStorage')); return; }
     showWelcome(false);
     await openArchive(test, name);
   }
@@ -556,14 +598,14 @@
       map: map, store: store, layer: fog, toast: toast,
       onChange: function (s) { editPtr = s.ptr; renderStatus(); },
       box: {
-        label: '框选',
-        hint: '拖出矩形：框里的红点 → 不需要处理（U 撤销）',
-        count: function (b) { return '框内 ' + inBox(b).length + ' 处待处理'; },
+        label: t('box.label'),
+        hint: t('box.hint'),
+        count: function (b) { return t('box.count', { n: inBox(b).length }); },
         apply: function (b) {
           var list = inBox(b);
-          if (!list.length) { toast('框里没有待处理的点'); return; }
+          if (!list.length) { toast(t('box.none')); return; }
           markBatch(list, 'ignored');
-          toast('已把 ' + list.length + ' 处标为「不需要处理」 · 按 U 撤销');
+          toast(t('box.done', { n: list.length }));
         },
       },
       snapPoints: function () {   // 当前存档里检测到的断头都可吸附（别的存档带来的标记点不算）
@@ -578,7 +620,7 @@
         },
       },
     });
-    busy('回放编辑记录…');
+    busy(t('o.replaying'));
     var ed = await editor.ready;
     editPtr = ed.ptr;
     fog.addTo(map);
@@ -587,7 +629,7 @@
       var b = fogDataBounds(archive);
       if (b) map.fitBounds(b);
     }
-    if (ed.ptr) toast('已回放 ' + ed.ptr + ' 步编辑');
+    if (ed.ptr) toast(t('o.replayed', { n: ed.ptr }));
     // 第一次打开、或换了存档：自动检测（标记按位置和方向沿用）
     if (state.source !== label) detect();
   }
@@ -637,28 +679,47 @@
   $('m-export').onclick = function () {
     download(new Blob([JSON.stringify(state)], { type: 'application/json' }), 'fog-trace-marks-' + stamp() + '.json');
     var n = points.filter(function (p) { return p.status !== 'open'; }).length;
-    toast('已导出 ' + points.length + ' 个点（其中 ' + n + ' 个已标记）');
+    toast(t('m.exported', { n: points.length, k: n }));
   };
   $('m-import').onclick = function () { $('f-marks').click(); };
   $('f-marks').onchange = async function () {
     var f = this.files[0]; this.value = '';
     if (!f) return;
     var st;
-    try { st = JSON.parse(await f.text()); } catch (e) { toast('不是有效的 JSON：' + e.message, 5000); return; }
-    if (!st || !Array.isArray(st.points)) { toast('格式不对：需要 { points: [...] }（导出标记 / tools/deadends.py 生成的文件）', 6000); return; }
+    try { st = JSON.parse(await f.text()); } catch (e) { toast(t('m.badJson', { e: e.message }), 5000); return; }
+    if (!st || !Array.isArray(st.points)) { toast(t('m.badFormat'), 6000); return; }
     importState(st, true);
   };
   async function importState(st, ask) {
     var have = points.filter(function (p) { return p.status !== 'open'; }).length;
     var come = st.points.filter(function (p) { return p.status === 'ignored' || p.status === 'done'; }).length;
-    if (ask && have && !confirm('导入会替换当前的全部标记（现在有 ' + have + ' 个已标记的点，文件里有 ' + come + ' 个）。继续？')) return;
+    if (ask && have && !confirm(t('m.confirm', { have: have, come: come }))) return;
     setState(st);
     await saveState(true);
     refresh(0);
-    toast('已导入 ' + st.points.length + ' 个点（' + come + ' 个已标记）', 4000);
+    toast(t('m.imported', { n: st.points.length, k: come }), 4000);
     if (store && state.source !== label) detect();
     else renderStatus();
   }
+
+  // ---------- 右上角：语言 / GitHub / 赞助 ----------
+  var langSel = $('lang');
+  FogI18n.LANGS.forEach(function (l) {
+    var o = document.createElement('option');
+    o.value = l; o.textContent = FogI18n.NAMES[l]; o.selected = l === FogI18n.lang;
+    langSel.appendChild(o);
+  });
+  langSel.onchange = function () { var v = this.value; flushSave().then(function () { FogI18n.set(v); }); };
+  function sponsor(show) { $('sponsor').classList.toggle('show', show); if (show) $('sp-close').focus(); }
+  $('b-sponsor').onclick = function () { sponsor(true); };
+  $('sp-close').onclick = function () { sponsor(false); };
+  $('sponsor').addEventListener('click', function (e) { if (e.target === this) sponsor(false); });
+  // 弹框开着时，键盘快捷键都不生效（Esc 关闭）
+  document.addEventListener('keydown', function (e) {
+    if (!$('sponsor').classList.contains('show')) return;
+    if (e.key === 'Escape') sponsor(false);
+    if (e.key !== 'Tab') { e.stopPropagation(); if (e.key === 'Escape') e.preventDefault(); }
+  }, true);
 
   var snapCache = null;
   // 框选范围内、地图上可见（≥ 最低分）的待处理点
@@ -669,14 +730,14 @@
   // ---------- 启动 ----------
   (async function boot() {
     try { setState(await FogDB.get('state')); }
-    catch (e) { storageOk = false; toast('浏览器不允许本地存储：这次的标记和编辑不会保存', 6000); }
+    catch (e) { storageOk = false; toast(t('o.storageBlocked'), 6000); }
     refresh(0);
     var saved = null;
     try { saved = await FogDB.get('archive'); } catch (e) { /* 同上 */ }
     if (!saved) { showWelcome(true, false); renderStatus(); return; }
-    busy('打开 ' + saved.name + '…');
+    busy(t('o.opening', { a: saved.name }));
     try { await openArchive(await FogDecoder.open(await saved.blob.arrayBuffer()), saved.name); }
-    catch (e) { busy(''); showWelcome(true, false); welcomeError('上次的存档打不开了：' + e.message); }
+    catch (e) { busy(''); showWelcome(true, false); welcomeError(t('o.lastFailed', { e: e.message })); }
   })();
 
   window.__review = { mark: mark, select: select, map: map, detect: detect, chooseArchive: chooseArchive, importState: importState,

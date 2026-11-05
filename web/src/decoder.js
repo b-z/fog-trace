@@ -59,7 +59,7 @@
   // 用浏览器原生 DecompressionStream 做 zlib inflate，避免额外依赖 pako。
   async function inflateZlib(bytes) {
     if (typeof DecompressionStream === 'undefined') {
-      throw new Error('浏览器不支持 DecompressionStream，请换用现代浏览器');
+      throw new Error(global.FogI18n ? global.FogI18n.t('e.noDecompress') : 'This browser lacks DecompressionStream: please use a current browser');
     }
     var ds = new DecompressionStream('deflate'); // 'deflate' = zlib 包装 (RFC1950)，匹配 0x78 头
     var stream = new Response(bytes).body.pipeThrough(ds);

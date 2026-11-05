@@ -6,7 +6,7 @@ const { Worker, isMainThread, parentPort } = require('worker_threads');
 const root = path.join(__dirname, '..');
 
 if (!isMainThread) {
-  require(path.join(root, 'src/detect-core.js'));
+  require(path.join(root, 'web/src/detect-core.js'));
   parentPort.on('message', (m) => {
     const subs = [];
     for (let k = 0; k < m.n; k++) subs.push([m.ij[2 * k], m.ij[2 * k + 1], m.bits.subarray(512 * k, 512 * k + 512)]);
@@ -15,8 +15,8 @@ if (!isMainThread) {
   return;
 }
 
-globalThis.JSZip = require(path.join(root, 'vendor/jszip.min.js'));
-for (const f of ['decoder', 'geo', 'fog-store', 'detect-core', 'detect']) require(path.join(root, 'src', f + '.js'));
+globalThis.JSZip = require(path.join(root, 'web/vendor/jszip.min.js'));
+for (const f of ['decoder', 'geo', 'fog-store', 'detect-core', 'detect']) require(path.join(root, 'web/src', f + '.js'));
 
 function nodePool(size) {
   const idle = [], queue = [], pending = new Map();

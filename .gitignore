@@ -11,3 +11,4 @@ fog-trace-marks-*.json
 .venv/
 __pycache__/
 node_modules/
+.wrangler/

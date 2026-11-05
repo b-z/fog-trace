@@ -6,6 +6,7 @@
  *
  * store  = FogStore.create(archive)；layer = createFogLayer(null, { source: store })
  * api    = { load(): Promise<{ops, ptr, exported_ptr}>, save(doc): Promise }
+ * t        = function (key, params) 界面文字，默认用 FogI18n.t（src/i18n.js）
  * onChange = function ({ops, ptr, exportedPtr})  每次编辑 / 撤销 / 重做 / 导出后调用，可省略
  * snapPoints = function () → [[x, y], ...]  可吸附的端点（世界像素，像素中心 = 整数 + 0.5），可省略
  * box  = { label, hint, count(bounds) → n, apply(bounds) }  可省略；提供时多一个「框选」工具（B），
@@ -32,6 +33,7 @@
   function attach(o) {
     var map = o.map, store = o.store, layer = o.layer, api = o.api;
     var toast = o.toast || function () {};
+    var t = o.t || (global.FogI18n ? global.FogI18n.t : function (k) { return k; });   // 界面文字（src/i18n.js）
     var G = global.FogGeo;
     var container = map.getContainer();
 
@@ -46,7 +48,7 @@
     function enqueue(fn) {
       busy++; render();
       queue = queue.then(fn).catch(function (e) {
-        console.error(e); toast('编辑出错：' + e.message);
+        console.error(e); toast(t('e.error', { e: e.message }));
       }).then(function () { busy--; render(); });
       return queue;
     }
@@ -54,7 +56,7 @@
     function save() {
       var doc = { ops: ops, ptr: ptr, exported_ptr: exportedPtr };
       if (o.onChange) o.onChange({ ops: ops.length, ptr: ptr, exportedPtr: exportedPtr });
-      saving = saving.then(function () { return api.save(doc); }).catch(function (e) { toast('编辑记录保存失败：' + e.message); });
+      saving = saving.then(function () { return api.save(doc); }).catch(function (e) { toast(t('e.saveFail', { e: e.message })); });
     }
 
     function world(latlng) {
@@ -71,17 +73,17 @@
     var bar = L.DomUtil.create('div', 'fog-edit-bar', container);
     bar.innerHTML =
       '<div class="seg">' +
-      '<button data-tool="pan" title="浏览 (V)">浏览<kbd>V</kbd></button>' +
-      '<button data-tool="erase" title="橡皮擦 (E)">橡皮擦<kbd>E</kbd></button>' +
-      '<button data-tool="pen" title="折线画笔 (P)">画笔<kbd>P</kbd></button>' +
+      '<button data-tool="pan" title="' + t('e.pan') + ' (V)">' + t('e.pan') + '<kbd>V</kbd></button>' +
+      '<button data-tool="erase" title="' + t('e.erase') + ' (E)">' + t('e.erase') + '<kbd>E</kbd></button>' +
+      '<button data-tool="pen" title="' + t('e.pen') + ' (P)">' + t('e.pen') + '<kbd>P</kbd></button>' +
       (o.box ? '<button data-tool="box" title="' + o.box.label + ' (B)">' + o.box.label + '<kbd>B</kbd></button>' : '') +
       '</div>' +
-      '<label class="opt opt-erase">大小 <input type="range" min="4" max="80" step="2" value="' + eraserPx + '"><span></span></label>' +
-      '<span class="opt opt-pen">1px · 吸附端点（按住 ⌥ 不吸附）· 右键结束</span>' +
+      '<label class="opt opt-erase">' + t('e.size') + ' <input type="range" min="4" max="80" step="2" value="' + eraserPx + '"><span></span></label>' +
+      '<span class="opt opt-pen">' + t('e.penHint') + '</span>' +
       (o.box ? '<span class="opt opt-box">' + (o.box.hint || '') + '</span>' : '') +
-      '<div class="seg"><button data-act="undo" title="撤销 (⌘Z)">↶</button><button data-act="redo" title="重做 (⇧⌘Z)">↷</button></div>' +
+      '<div class="seg"><button data-act="undo" title="' + t('e.undo') + '">↶</button><button data-act="redo" title="' + t('e.redo') + '">↷</button></div>' +
       '<span class="edit-status"></span>' +
-      '<button data-act="export" class="export" title="打包改过的存档为 Sync.zip">导出存档</button>';
+      '<button data-act="export" class="export" title="' + t('e.exportTitle') + '">' + t('e.export') + '</button>';
     L.DomEvent.disableClickPropagation(bar);
     L.DomEvent.disableScrollPropagation(bar);
     var sizeIn = bar.querySelector('.opt-erase input'), sizeLbl = bar.querySelector('.opt-erase span');
@@ -107,9 +109,9 @@
       sizeLbl.textContent = '≈' + Math.round(eraserPx * wpp() * mpp(lat)) + ' m';
       bar.querySelector('[data-act="undo"]').disabled = !(ptr > 0 || penPts.length);
       bar.querySelector('[data-act="redo"]').disabled = ptr >= ops.length;
-      var s = busy ? '处理中…' : ptr === 0 ? '未编辑' :
-        ptr + ' 步编辑 · ' + (exportedPtr === ptr ? '已导出' : '未导出');
-      if (tool === 'erase' && map.getZoom() < MIN_ERASE_ZOOM) s = '放大到 ' + MIN_ERASE_ZOOM + ' 级以上才能擦除';
+      var s = busy ? t('e.busy') : ptr === 0 ? t('e.none') :
+        t('e.steps', { n: ptr }) + ' · ' + (exportedPtr === ptr ? t('e.exported') : t('e.notExported'));
+      if (tool === 'erase' && map.getZoom() < MIN_ERASE_ZOOM) s = t('e.zoomIn', { z: MIN_ERASE_ZOOM });
       statusEl.textContent = s;
       statusEl.classList.toggle('warn', ptr > 0 && exportedPtr !== ptr);
       cursor.style.width = cursor.style.height = (2 * eraserPx) + 'px';
@@ -147,7 +149,7 @@
         var d = diffs[ptr];
         await store.applyDiff(d, 'before');
         refresh(d.rect); save();
-        toast('已撤销');
+        toast(t('e.undone'));
       });
     }
     function redo() {
@@ -158,7 +160,7 @@
         else d = diffs[ptr] = await store.applyOp(ops[ptr]);
         ptr++;
         refresh(d.rect); save();
-        toast('已重做');
+        toast(t('e.redone'));
       });
     }
 
@@ -185,7 +187,7 @@
     container.addEventListener('mousedown', function (e) {
       if (tool !== 'erase' || spaceDown || e.button !== 0) return;
       e.preventDefault();
-      if (map.getZoom() < MIN_ERASE_ZOOM) { toast('放大到 ' + MIN_ERASE_ZOOM + ' 级以上再擦'); return; }
+      if (map.getZoom() < MIN_ERASE_ZOOM) { toast(t('e.zoomIn', { z: MIN_ERASE_ZOOM })); return; }
       var w = world(map.mouseEventToLatLng(e)), r = Math.round(eraserPx * wpp() * 100) / 100;
       stroke = { r: r, pts: [w], diff: store.newDiff() };
       var s = stroke;
@@ -294,14 +296,14 @@
     function finishPen(auto) {
       if (!penPts.length) return;
       if (penPts.length < 2) {
-        if (auto) cancelPen(); else toast('至少两个点才能成线');
+        if (auto) cancelPen(); else toast(t('e.twoPoints'));
         return;
       }
       var pts = penPts.map(function (p) { return p.w; }), op = { type: 'line', w: PEN_W, pts: pts };
       cancelPen();
       enqueue(async function () {
         var d = await store.applyOp(op);
-        if (!d.entries.size) { toast('这条线没有改变任何像素'); return; }
+        if (!d.entries.size) { toast(t('e.noChange')); return; }
         refresh(d.rect);
         commit(op, d);
       });
@@ -368,7 +370,7 @@
     function exportZip() {
       if (tool === 'pen') finishPen(true);
       enqueue(async function () {
-        toast('正在打包存档…');
+        toast(t('e.packing'));
         var res = await store.exportZip('blob'), s = res.summary;
         var name = 'Sync-edited-' + stamp() + '.zip';
         var a = document.createElement('a');
@@ -376,7 +378,7 @@
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
         exportedPtr = ptr; save();
-        toast('已导出 ' + name + '：改动 ' + s.changed + ' 个区块，新增 ' + s.created + '，擦空删除 ' + s.emptied + '，原样保留 ' + (s.copied) + ' 个文件');
+        toast(t('e.exportDone', { name: name, changed: s.changed, created: s.created, emptied: s.emptied, copied: s.copied }));
       });
     }
 

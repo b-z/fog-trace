@@ -2,10 +2,10 @@
 // Self-test of src/fog-store.js: filename encoding, no-op export, and a few real edits.
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
-globalThis.JSZip = require(path.join(root, 'vendor/jszip.min.js'));
-require(path.join(root, 'src/decoder.js'));
-require(path.join(root, 'src/geo.js'));
-require(path.join(root, 'src/fog-store.js'));
+globalThis.JSZip = require(path.join(root, 'web/vendor/jszip.min.js'));
+require(path.join(root, 'web/src/decoder.js'));
+require(path.join(root, 'web/src/geo.js'));
+require(path.join(root, 'web/src/fog-store.js'));
 
 (async () => {
   const [zipPath, outPath] = process.argv.slice(2);

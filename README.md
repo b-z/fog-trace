@@ -1,134 +1,150 @@
-# Fog Trace · 迷雾轨迹断头复查
+# Fog Trace
 
-在浏览器里打开《世界迷雾》(Fog of World) 的同步存档：自动找出轨迹里断开的地方（断头），逐个复查标记；
-顺手擦掉 GPS 飘出去的线、补上缺的路，再导出成 App 能导入的存档。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/b-z)
 
-**在线使用：<https://b-z.github.io/fog-trace/>**
+[中文](docs/zh/README.md) · [日本語](docs/ja/README.md)
 
-纯静态网页，没有后端。存档只在你自己的浏览器里读取和处理，不会上传；标记和编辑记录也只存在这个浏览器里。
+**Find and fix the places where your Fog of World tracks break off, right in the browser.**
 
-> 非官方工具，与 App 开发者无关。导入改过的存档前，请先备份原来的同步文件夹。
+### 👉 [Open Fog Trace](https://fog-trace.pages.dev/)
 
-## 怎么用
+Fog Trace opens the data of [Fog of World](https://fogofworld.app) (the app that clears a fog wherever you go) and finds the **dead ends** in your tracks: trips that start or stop in the middle of nowhere, places where you turned back, and gaps where GPS dropped out. You review them one by one, sorted by how likely they are to be real, and you can fix what you find: erase GPS glitches, draw in the road you actually took, and export an archive the app can import.
 
-1. 打开网页，选择 App 的 `Sync` 文件夹，或把它压缩成的 zip（也可以直接拖进页面）。
-2. 第一次打开会自动检测断头：整份存档几秒到十几秒，地图上的红点就是待处理的断头。
-3. 按置信度从高到低复查：`J` / `K` 上下切换，`X` 不需要处理，`D` 已处理，`U` 撤销。标过的点变成灰点。
-4. 需要修的地方用地图上方的工具改：橡皮擦擦掉飘出去的线，画笔补上缺的路。改完点「重新检测」，只重算改过的区域（不到一秒）。
-5. 点「导出存档」下载 `Sync-edited-….zip`，再导回 App。导回前先备份原来的存档；想再确认一遍，可以用 `tools/check_export.py` 校验（见下）。
+It is a static web page. Your archive is read and processed only in your browser and is never uploaded; marks and edits are stored in your browser too.
 
-存档在哪里：App 开启同步后，同步目录里的 `Sync` 文件夹就是存档（每个文件是一块地图区域）。
-iCloud 同步的 Mac 上在 `~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync`
-（文件选择窗口里按 `⌘⇧G` 粘贴路径；还在云端没下载的文件要先在 Finder 里下载）。
+<p align="center"><img src="docs/images/screenshot.jpg" alt="The review page: a map with the detected dead ends, and the list sorted by confidence on the right" width="100%"></p>
 
-## 功能
+*The review page (Chinese interface). The list on the right is sorted by confidence; the selected dead end (yellow ring) is where a track recorded on a high-speed train breaks off.*
 
-| 功能 | 说明 |
+> Fog Trace is an independent project and is not affiliated with Fog of World or its developer. Back up your archive before importing an edited one into the app.
+
+## How to use
+
+1. Open [fog-trace.pages.dev](https://fog-trace.pages.dev/) and choose the app's `Sync` folder, or a zip of it (you can also drop it on the page).
+2. Dead ends are detected automatically: a few seconds for a whole archive. Red points on the map are the ones to review.
+3. Review from the highest confidence down: `J` / `K` next / previous, `X` ignore, `D` fixed, `U` undo. Reviewed points turn gray.
+4. Fix what needs fixing with the tools above the map: the eraser for GPS glitches, the pen for missing roads. Then click "Re-detect"; only the areas you changed are computed again (well under a second).
+5. Click "Export archive" to download `Sync-edited-….zip` and import it back into the app.
+
+**Where the archive is.** With sync turned on, the app keeps your data in a `Sync` folder (one file per map area). With iCloud on a Mac it is `~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync`: in the file dialog press `⌘⇧G` and paste the path. Files that are still only in iCloud must be downloaded in Finder first. With Dropbox it is the `Sync` folder inside the app's Dropbox folder.
+
+The page is available in English, Chinese and Japanese (switch at the top right).
+
+## Features
+
+| Feature | What it does |
 |---|---|
-| 断头检测 | 找出轨迹「突出来、不和别处相连」的地方：起终点、原地掉头、GPS 信号丢失。每处有 0–100 的置信度 |
-| 复查 | 按置信度排序；上方分类只筛右侧列表，地图上始终显示全部点（待处理红色，标过的灰色）；「最低分」滑块过滤低分点 |
-| 框选 `B` | 拖出矩形，框里看得到的红点一次标成「不需要处理」；已处理的不改，整批 `U` 撤销 |
-| 浏览 `V` | 拖动平移，滚轮缩放 |
-| 橡皮擦 `E` | 按住拖动擦除；`[` `]` 调大小；按住空格临时拖地图；放大到 12 级以上才能擦 |
-| 画笔 `P` | 1px 细线（与轨迹同宽）。单击加点，右键 / 双击 / `Enter` 结束，`Backspace` 删上一个点，`Esc` 取消 |
-| 吸附 | 画笔顶点自动接到附近的断头或画过的线的端点（实线圈），其次接到附近的轨迹（虚线圈）；按住 `⌥` 不吸附 |
-| 撤销 `⌘Z` / 重做 `⇧⌘Z` | 一次拖擦 / 一条折线为一步 |
-| 导出存档 | 只重新编码改过的区块，其余文件逐字节原样保留；整块擦空的区块不写文件（与 App 的做法一致） |
+| Dead-end detection | Finds where tracks stick out without connecting to anything: the start and end of trips, turning back, lost GPS signal. Each place gets a confidence from 0 to 100 |
+| Review | Sorted by confidence. The tabs filter the list; the map always shows every point (red = to review, gray = reviewed). A "Min score" slider hides weak candidates |
+| Box `B` | Drag a box: every red point inside becomes "ignored" in one step (`U` undoes the whole box). Points already marked fixed stay as they are |
+| Eraser `E` | Drag to erase. `[` `]` change the size; hold Space to pan; zoom in to level 12 or more |
+| Pen `P` | A 1-pixel line, as thin as the tracks. Click to add points; right-click, double-click or `Enter` to finish; `Backspace` removes the last point, `Esc` cancels |
+| Snapping | Pen points snap to nearby dead ends and line ends (solid ring), otherwise to the nearest track pixel (dashed ring). Hold `⌥` to turn snapping off |
+| Undo `⌘Z` / Redo `⇧⌘Z` | One erase stroke or one line is one step |
+| Export archive | Only the blocks you changed are re-encoded; every other file is copied byte for byte. A block erased to nothing is left out, as the app itself does |
 
-## 断头检测
+## How detection works
 
-每个窗口 32×32 个子瓦片（2048×2048 像素）外加 4 个子瓦片的边距，Web Worker 并行处理：
+The archive is processed in windows of 32 × 32 subtiles (2048 × 2048 pixels) with a margin of 4 subtiles, in parallel Web Workers:
 
-位图 → 膨胀 1px（补栅格缝）→ 骨架化 → 剪掉 < 6px 的毛刺 → 骨架端点 → 打分
+bitmap → dilate by 1 px (bridges raster gaps) → skeletonize → prune spurs shorter than 6 px → skeleton endpoints → score
 
-**置信度**（0–100）= 三个饱和因子相乘，任何一项小都会把分数压低：
+The **confidence** (0–100) is the product of three saturating factors, so any one of them being small keeps the score low:
 
-- **突出长度**：端点沿骨架回溯到最近分叉点的长度（很短 ≈ GPS 抖动）；
-- **前方空旷**：沿突出方向 ±35° 锥形内，到下一段轨迹的距离（≤3px 说明轨迹其实接着走，只是骨架断了）；
-- **离别的轨迹**：端点到「不属于自己这条支线」的轨迹的最近距离（≈1px 说明是粗轨迹带里的假端点）。
+- **Sticks out**: length from the endpoint back to the nearest junction along the skeleton (very short ≈ GPS jitter).
+- **Clear ahead**: distance to the next track inside a ±35° cone in the direction the end points (≤ 3 px means the track actually continues and only the skeleton broke).
+- **To other track**: distance from the end to any track that is not its own branch (≈ 1 px means a false end inside a thick band of tracks).
 
-**类型**：支线断头（从主线伸出后停住）、孤立线段端点（两头都不连，多为信号丢失）、孤立点。
+**Kinds**: branch end (sticks out from a track and stops), loose segment end (neither end connects, usually lost signal), lone dot.
 
-窗口结果按内容哈希缓存在浏览器里：再次检测（编辑后、或打开新同步的存档）只重算内容变了的窗口。
+Window results are cached in the browser by content hash, so detecting again after edits, or on a newer sync of the same data, only recomputes the windows that changed.
 
-## 标记会跟着走
+## Your marks follow you
 
-所有存档共用一份标记。打开别的存档（新导出的、或更早的）时自动检测，标记按以下规则沿用：
+All archives share one set of marks. When you open another archive (a newer sync, an older backup, an exported one) it is detected automatically and the marks are carried over:
 
-- 新检测到的端点与旧点相距 ≤6px、且突出方向相差 ≤60°，算同一个端点：沿用原来的 ID 和标记，位置和分数更新；
-  方向不同的（比如断口两侧相对的两个端头）不会被误合并。
-- 标过的点永不删除；当前存档里没检测到的（已修好、或来自别的存档）保留，列表里变淡，卡片注明「没检测到」。
-- 待处理的点没再检测到就去掉（多半是修好了）。
+- A new detection within 6 px of an old point that points the same way (within 60°) is the same dead end: it keeps its ID and mark, with the new position and score. Two ends facing each other across a gap are not merged.
+- Marked points are never deleted. Those not detected in the current archive (fixed, or from another archive) are kept and shown faded.
+- Points still to review that are no longer detected are dropped (usually because they were fixed).
 
-「存档与标记」菜单里可以**导出标记**（JSON，备份或换设备）和**导入标记**。浏览器清除网站数据会把标记一起删掉，记得备份。
+The "Archive & marks" menu can **export marks** as JSON (backup, or moving to another device) and **import** them again. Clearing the site's data in the browser deletes the marks too, so keep a backup.
 
-## 本地运行
+## Related project
 
-需要经 HTTP 打开（Web Worker 不能从 `file://` 加载）：
+[**fogprint**](https://github.com/b-z/fogprint): ask an AI agent such as Claude Code or Codex about your Fog of World map. Which countries, prefectures or rail lines you have not been to yet, what a trip added, and a plan to fill the gaps. Fog Trace cleans up the map; fogprint answers questions about it.
 
-```bash
-python3 -m http.server 8000
-```
+## Command-line tools (`tools/`)
 
-然后打开 <http://localhost:8000/>。需要较新的 Chrome / Edge / Safari / Firefox（用到 `DecompressionStream`、Web Worker、IndexedDB）。
-
-## 命令行工具（`tools/`）
-
-| 工具 | 用途 |
+| Tool | Purpose |
 |---|---|
-| `deadends.py` | 断头检测的 Python 参考实现（numpy + scipy + scikit-image），输出的 JSON 可以在网页里「导入标记」 |
-| `detect_node.js` | 在 Node 里跑网页版的检测（同一份 `src/detect-core.js`） |
-| `compare_raw.py` | 逐条比对两边的检测结果 |
-| `check_export.py` | 校验导出的存档：每个区块的格式、未改区块逐字节一致；带 `--ops` 时独立重放编辑记录逐像素比对 |
-| `apply_edits.js` | 不开浏览器，把编辑记录套到存档上导出（与网页同一套代码） |
-| `store_selftest.js` | 存储层自测：文件名编码、无改动重新编码、真实编辑 |
+| `deadends.py` | Python reference implementation of the detector (numpy + scipy + scikit-image). Its JSON output can be imported in the page with "Import marks" |
+| `detect_node.js` | Runs the page's detector in Node (the same `web/src/detect-core.js`) |
+| `compare_raw.py` | Compares the two detectors' results field by field |
+| `check_export.py` | Checks an exported archive: format of every block, unchanged blocks byte-identical, and with `--ops` an independent pixel-by-pixel replay of the edit log |
+| `apply_edits.js` | Applies an edit log to an archive without a browser (same code as the page) |
+| `store_selftest.js` | Self-test of the storage layer: file names, no-op re-encoding, real edits |
 
-网页版与 Python 版逐条一致（骨架化的查表、最近像素等距时取哪个，都照搬了 scikit-image / SciPy 的实现）：
+The browser detector gives exactly the same result as the Python one: the skeletonization lookup table and the exact Euclidean feature transform (including which pixel wins a tie) are ported from scikit-image and SciPy.
 
 ```bash
 pip install -r tools/requirements.txt
-python3 tools/deadends.py Sync.zip --state /tmp/state.json --raw /tmp/py.json   # 约 3 分钟
-node tools/detect_node.js Sync.zip --raw /tmp/js.json                           # 约 6 秒
+python3 tools/deadends.py Sync.zip --state /tmp/state.json --raw /tmp/py.json   # about 3 minutes
+node tools/detect_node.js Sync.zip --raw /tmp/js.json                           # about 6 seconds
 python3 tools/compare_raw.py /tmp/py.json /tmp/js.json
 ```
 
-## 存档格式
+## Run locally and deploy
 
-逆向自「迷雾资料库」系列文章，并用真实存档逐字节校验：
+The page must be served over HTTP (Web Workers do not load from `file://`):
 
-- 世界坐标系：Web Mercator，整个世界展开为 2²² × 2²² 像素（相当于 OSM 第 14 级）。
-- 分 512 × 512 个区块，每块 8192 × 8192 像素，对应 `Sync/` 下的一个文件。区块编号 = `512 × y + x`，`(x, y)` 就是 XYZ 瓦片第 9 级的坐标。
-- 区块文件是 zlib 压缩。解压后前 32768 字节是 128 × 128 的 uint16（小端）索引，每格是子瓦片编号，0 表示空；
-  之后每个子瓦片 515 字节：64 × 64 的位图（1 bit/像素，高位在前，1 = 走过）+ 3 字节大端整数 `2 × 走过像素数 + 1`。
-- 文件名 = `md5(区块编号)` 的前 4 位 + 编号各位数字按表 `olhwjsktri` 替换 + `编号 % 100` 的两位数字按表 `eizxdwknmo` 替换。
+```bash
+python3 -m http.server 8000 --directory web
+```
 
-## 代码结构
+Then open <http://localhost:8000/>. It needs a current Chrome, Edge, Safari or Firefox (`DecompressionStream`, Web Workers, IndexedDB).
 
-| 文件 | 内容 |
+The site is deployed to Cloudflare Pages from the `web/` folder:
+
+```bash
+npx wrangler@4 pages deploy web --project-name fog-trace --branch main
+```
+
+## Code structure
+
+| File | Contents |
 |---|---|
-| `index.html` | 页面：打开存档、复查列表、卡片、检测进度、标记导入导出 |
-| `src/decoder.js` | 解码 zip → 区块 |
-| `src/geo.js` | 经纬度 ↔ 世界像素 |
-| `src/fog-layer.js` | Leaflet 轨迹图层 |
-| `src/fog-store.js` | 可编辑存档：擦 / 画、撤销用的差异、区块编码与导出 |
-| `src/editor.js` | 地图编辑交互：工具栏、橡皮擦、画笔与吸附、框选 |
-| `src/detect-core.js` | 断头检测算法（一个窗口） |
-| `src/detect.js` | 分窗口、Worker 池、缓存、去重、标记合并 |
-| `src/detect-worker.js` | Web Worker |
-| `src/storage.js` | IndexedDB：标记、编辑记录、最近的存档、检测缓存 |
-| `vendor/` | Leaflet 1.9.4、JSZip 3.10.1（本地文件，不走 CDN） |
+| `web/index.html` | The page: opening archives, review list, card, detection progress, marks import / export |
+| `web/src/i18n.js` | Interface text in English, Chinese and Japanese |
+| `web/src/decoder.js` | Decodes a zip into blocks |
+| `web/src/geo.js` | Latitude / longitude ↔ world pixels |
+| `web/src/fog-layer.js` | Leaflet layer that draws the tracks |
+| `web/src/fog-store.js` | Editable archive: erase / draw, diffs for undo, block encoding and export |
+| `web/src/editor.js` | Map editing: toolbar, eraser, pen with snapping, box selection |
+| `web/src/detect-core.js` | Dead-end detection for one window |
+| `web/src/detect.js` | Windows, worker pool, cache, dedupe, merging marks |
+| `web/src/detect-worker.js` | Web Worker |
+| `web/src/storage.js` | IndexedDB: marks, edit logs, the last archive, detection cache |
+| `web/vendor/` | Leaflet 1.9.4 and JSZip 3.10.1, served locally (no CDN) |
 
-## 底图
+## Basemap
 
-底图用 OpenStreetMap 官方瓦片，按 [OSM 瓦片使用政策](https://operations.osmfoundation.org/policies/tiles/) 适合个人和小流量使用。
-访问量大的部署请换成别的瓦片服务（改 `index.html` 里的 `BASEMAP`）。轨迹本身的解码、检测和渲染不依赖任何外部服务。
+The basemap uses the OpenStreetMap tile servers, which per the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) suit personal, low-traffic use. For heavy traffic, switch to another tile provider (`BASEMAP` in `web/index.html`). Decoding, detection and drawing of your tracks do not depend on any external service.
 
-## 致谢
+## Credits
 
-- 存档格式：微信公众号「迷雾资料库」《世界迷雾逆向工程系列》，以及 vicc.wang 的「迷雾橡皮擦」。
-- 检测算法中的骨架化与距离变换移植自 [scikit-image](https://scikit-image.org/) 和 [SciPy](https://scipy.org/)（BSD-3-Clause），见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-- 地图：[Leaflet](https://leafletjs.com/)、© [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors。
+- Archive format: the "迷雾资料库" articles on reverse-engineering Fog of World, and vicc.wang's "迷雾橡皮擦" (fog eraser).
+- The skeletonization and distance transform in the detector are ported from [scikit-image](https://scikit-image.org/) and [SciPy](https://scipy.org/) (BSD-3-Clause); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Map: [Leaflet](https://leafletjs.com/), © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
 
-## 许可
+## Support the project
 
-MIT，见 [LICENSE](LICENSE)。
+Fog Trace is maintained in spare time. If it helped clean up your map, you can support it through [GitHub Sponsors](https://github.com/sponsors/b-z) or with WeChat. Sponsoring is entirely optional and does not affect how issues or pull requests are handled.
+
+<table><tr>
+<td align="center" valign="middle"><a href="https://github.com/sponsors/b-z"><img src="https://img.shields.io/badge/GitHub%20Sponsors-%E2%9D%A4%20Sponsor-db61a2?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="36"></a></td>
+<td align="center" valign="middle"><img src="web/img/wechat-reward.jpg" alt="WeChat reward QR code" width="180"></td>
+</tr></table>
+
+## License
+
+[MIT](LICENSE).
