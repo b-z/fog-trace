@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>迷雾轨迹 · 断头复查</title>
+<meta name="description" content="在浏览器里打开《世界迷雾》(Fog of World) 的同步存档：找出轨迹断头、标记复查、擦除和补线，导出改好的存档。数据不离开本机。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='none' stroke='%2350dc8c' stroke-width='2.5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d0d0d; --panel: #141414; --line: #242424; --text: #ddd; --muted: #8a8a8a;
+    --open: #ff6b5b; --ignored: #8a8a8a; --done: #4da3ff; --accent: #ffd34d; --track: #50dc8c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 13px/1.5 system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  #app { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: auto 1fr; height: 100%; }
+  #bar { grid-column: 1 / 3; display: flex; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  #bar h1 { font-size: 14px; margin: 0; font-weight: 600; white-space: nowrap; }
+  .tabs { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .tabs button { background: none; border: 0; color: var(--muted); padding: 4px 10px; cursor: pointer; font: inherit; }
+  .tabs button.on { background: #262626; color: var(--text); }
+  .tabs b { font-weight: 600; margin-left: 4px; }
+  #bar label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  #status { color: var(--muted); font-size: 12px; margin-left: auto; min-width: 0; }
+  #status.warn { color: var(--accent); }
+  .barbtn { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: #1e1e1e; color: var(--text); cursor: pointer; white-space: nowrap; }
+  .barbtn:hover:not(:disabled) { background: #262626; }
+  .barbtn:disabled { opacity: .45; cursor: default; }
+  .barbtn.primary { border-color: #6b5a1c; color: var(--accent); }
+  .menu { position: relative; }
+  .menu .pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 1200; background: #1b1b1b; border: 1px solid #333; border-radius: 6px; padding: 4px; display: none; min-width: 210px; }
+  .menu.open .pop { display: block; }
+  .menu .pop button, .menu .pop a { display: block; width: 100%; text-align: left; font: inherit; font-size: 12px; background: none; border: 0; color: var(--text); padding: 6px 10px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+  .menu .pop button:hover, .menu .pop a:hover { background: #2a2a2a; }
+  .menu .pop hr { border: 0; border-top: 1px solid #2a2a2a; margin: 4px 0; }
+  #list .row.absent { opacity: .45; }
+  .absent-note { color: var(--accent); }
+  #mapwrap { position: relative; min-height: 0; }
+  #map { position: absolute; inset: 0; background: #111; }
+  .leaflet-tile-pane .osm { filter: grayscale(.9) brightness(.75) contrast(1.05); }
+  #side { border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+  #card { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  #card .rank { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+  #card .score { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 6px; }
+  #card .score b { font-size: 28px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .meter { height: 4px; background: #2a2a2a; border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+  .meter i { display: block; height: 100%; background: var(--accent); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 10px; font-size: 12px; }
+  dt { color: var(--muted); } dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 0 7px; border-radius: 9px; font-size: 12px; border: 1px solid currentColor; }
+  .s-open { color: var(--open); } .s-ignored, .s-done { color: var(--ignored); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .actions button, .nav button { font: inherit; padding: 7px 8px; border-radius: 6px; border: 1px solid var(--line); background: #1e1e1e; color: var(--text); cursor: pointer; }
+  .actions button:hover, .nav button:hover { background: #262626; }
+  .actions .ign { border-color: #555; } .actions .done { border-color: #2f5f8f; }
+  .actions button:disabled, .nav button:disabled { opacity: .4; cursor: default; }
+  kbd { font: 11px ui-monospace, monospace; color: var(--muted); border: 1px solid #333; border-radius: 3px; padding: 0 4px; margin-left: 4px; }
+  .nav { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .links { margin-top: 8px; font-size: 12px; display: flex; gap: 12px; }
+  .links a { color: var(--done); }
+  #empty { padding: 20px 14px; color: var(--muted); }
+  #listhead { padding: 6px 14px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  #list { overflow: auto; flex: 1; }
+  #list .row { display: grid; grid-template-columns: 44px 38px 1fr auto; gap: 6px; padding: 3px 14px; cursor: pointer; border-bottom: 1px solid #1a1a1a; font-variant-numeric: tabular-nums; }
+  #list .row:hover { background: #1b1b1b; }
+  #list .row.cur { background: #2a2614; }
+  #list .row .r { color: var(--muted); }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #222; border: 1px solid #333; padding: 6px 14px; border-radius: 6px; display: none; z-index: 2000; max-width: calc(100% - 32px); }
+  /* 打开存档 */
+  #welcome { position: absolute; inset: 0; z-index: 1100; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(10,10,10,.82); }
+  #welcome.show { display: flex; }
+  #welcome .box { max-width: 560px; width: 100%; background: #161616; border: 1px solid #2c2c2c; border-radius: 12px; padding: 22px 24px; }
+  #welcome h2 { margin: 0 0 6px; font-size: 18px; font-weight: 650; }
+  #welcome p { margin: 6px 0; color: #bbb; }
+  #welcome .pick { display: flex; gap: 10px; margin: 16px 0 10px; flex-wrap: wrap; }
+  #welcome .pick button { font: inherit; font-size: 14px; padding: 9px 16px; border-radius: 8px; border: 1px solid #6b5a1c; background: #241f0e; color: var(--accent); cursor: pointer; }
+  #welcome .pick button.sec { border-color: #333; background: #1e1e1e; color: var(--text); }
+  #welcome .drop { border: 1.5px dashed #3a3a3a; border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); }
+  #welcome.drag .drop { border-color: var(--accent); color: var(--accent); }
+  #welcome details { margin-top: 12px; color: #aaa; font-size: 12px; }
+  #welcome summary { cursor: pointer; color: var(--muted); }
+  #welcome code { font: 11.5px ui-monospace, monospace; background: #222; padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  #welcome .privacy { color: var(--track); font-size: 12px; margin-top: 12px; }
+  #welcome .err { color: var(--open); margin-top: 8px; display: none; }
+  #welcome .close { float: right; background: none; border: 0; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
+  /* 编辑工具栏（src/editor.js） */
+  .fog-edit-bar { position: absolute; top: 10px; left: 56px; right: 10px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    width: max-content; max-width: calc(100% - 66px); background: rgba(18,18,18,.94); border: 1px solid #333; border-radius: 8px; padding: 5px 8px; font-size: 12px; }
+  .fog-edit-bar .seg { display: flex; border: 1px solid #333; border-radius: 6px; overflow: hidden; }
+  .fog-edit-bar button { font: inherit; background: none; border: 0; color: var(--text); padding: 4px 9px; cursor: pointer; }
+  .fog-edit-bar .seg button + button { border-left: 1px solid #333; }
+  .fog-edit-bar button:hover:not(:disabled) { background: #262626; }
+  .fog-edit-bar button.on { background: #3a3420; color: var(--accent); }
+  .fog-edit-bar button:disabled { opacity: .35; cursor: default; }
+  .fog-edit-bar .export { border: 1px solid #2f5f8f; border-radius: 6px; color: #9cc8ff; }
+  .fog-edit-bar .opt { display: flex; gap: 5px; align-items: center; color: var(--muted); }
+  .fog-edit-bar .opt input { width: 90px; }
+  .fog-edit-bar kbd { margin-left: 5px; }
+  .edit-status { color: var(--muted); }
+  .edit-status.warn { color: var(--accent); }
+  .fog-eraser-cursor { position: absolute; z-index: 900; pointer-events: none; display: none; border: 1.5px solid #fff; border-radius: 50%;
+    transform: translate(-50%, -50%); box-shadow: 0 0 0 1px rgba(0,0,0,.7), inset 0 0 0 1px rgba(0,0,0,.4); }
+  .leaflet-container.fog-tool-erase, .fog-tool-erase .leaflet-interactive { cursor: none; }
+  .leaflet-container.fog-tool-pen, .leaflet-container.fog-tool-pen.leaflet-grab,
+  .leaflet-container.fog-tool-box, .leaflet-container.fog-tool-box.leaflet-grab { cursor: crosshair; }
+  .fog-box-tip { position: absolute; z-index: 900; pointer-events: none; display: none; background: rgba(18,18,18,.94); border: 1px solid #333;
+    border-radius: 5px; padding: 2px 8px; font-size: 12px; color: var(--accent); white-space: nowrap; }
+  .fog-editing .leaflet-overlay-pane { pointer-events: none; }
+  @media (max-width: 760px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 55vh 1fr; }
+    #bar { grid-column: 1; padding: 8px 12px; gap: 8px; }
+    #status { margin-left: 0; width: 100%; order: 10; }
+    #side { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <h1>断头复查</h1>
+    <div class="tabs" id="tabs">
+      <button data-f="open" class="on">待处理<b id="n-open">0</b></button>
+      <button data-f="ignored">不需要处理<b id="n-ignored">0</b></button>
+      <button data-f="done">已处理<b id="n-done">0</b></button>
+      <button data-f="all">全部<b id="n-all">0</b></button>
+    </div>
+    <label>最低分 <input id="minScore" type="range" min="0" max="90" step="5" value="0" style="width:110px"> <b id="minScoreV">0</b></label>
+    <span id="status"></span>
+    <button class="barbtn" id="b-detect" disabled title="检测当前存档（含编辑）的断头；窗口内容没变的直接用上次的结果">检测</button>
+    <div class="menu" id="menu">
+      <button class="barbtn" id="b-menu">存档与标记 ▾</button>
+      <div class="pop">
+        <button id="m-open">打开别的存档…</button>
+        <hr>
+        <button id="m-export">导出标记（备份 / 换设备）</button>
+        <button id="m-import">导入标记…</button>
+        <hr>
+        <a href="https://github.com/b-z/fog-trace" target="_blank" rel="noopener">源码与说明 ↗</a>
+      </div>
+    </div>
+  </div>
+  <div id="mapwrap">
+    <div id="map"></div>
+    <div id="welcome">
+      <div class="box">
+        <button class="close" id="w-close" title="关闭" hidden>×</button>
+        <h2>打开《世界迷雾》存档</h2>
+        <p>找出轨迹里断开的地方（断头），逐个复查标记；也能擦掉 GPS 飘出去的线、补上缺的路，再导出成 App 能导入的存档。</p>
+        <div class="pick">
+          <button id="w-zip">选择 Sync.zip</button>
+          <button id="w-dir" class="sec">选择 Sync 文件夹</button>
+        </div>
+        <div class="drop">或者把 zip / Sync 文件夹拖到这里</div>
+        <div class="err" id="w-err"></div>
+        <details>
+          <summary>存档在哪里？</summary>
+          <p>App 开启同步后，存档是同步目录里的 <code>Sync</code> 文件夹（每个文件是一块地图区域）。整个文件夹选中即可，或者先压缩成 zip。</p>
+          <p>iCloud 同步的 Mac：<code>~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync</code>。选择窗口里按 <kbd>⌘⇧G</kbd> 粘贴这个路径。文件如果还在云端（图标带云朵），先在 Finder 里下载。</p>
+          <p>Dropbox 同步：Dropbox 里 App 的文件夹下的 <code>Sync</code>。</p>
+        </details>
+        <p class="privacy">存档只在你的浏览器里读取和处理，不会上传到任何地方。标记和编辑记录也只存在这个浏览器里（可在「存档与标记」里导出备份）。</p>
+      </div>
+    </div>
+  </div>
+  <div id="side">
+    <div id="card"></div>
+    <div id="listhead"><span id="listcount"></span><span>按置信度排序</span></div>
+    <div id="list"></div>
+  </div>
+</div>
+<div id="toast"></div>
+<input type="file" id="f-zip" accept=".zip,application/zip" hidden>
+<input type="file" id="f-dir" webkitdirectory hidden>
+<input type="file" id="f-marks" accept=".json,application/json" hidden>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="src/decoder.js"></script>
+<script src="src/geo.js"></script>
+<script src="src/fog-layer.js"></script>
+<script src="src/fog-store.js"></script>
+<script src="src/editor.js"></script>
+<script src="src/detect-core.js"></script>
+<script src="src/detect.js"></script>
+<script src="src/storage.js"></script>
+<script>
+(function () {
+  'use strict';
+  // 底图：换成别的瓦片服务只改这里
+  var BASEMAP = { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19 };
+  var KIND = { junction: '支线断头', end: '孤立线段端点', dot: '孤立点' };
+  var STATUS = { open: '待处理', ignored: '不需要处理', done: '已处理' };
+  var COLOR = { open: '#ff6b5b', ignored: '#8a8a8a', done: '#8a8a8a' };   // 标过的（不需要处理 / 已处理）都是灰色
+  var $ = function (id) { return document.getElementById(id); };
+
+  var state = { points: [] }, points = [], byId = {}, filter = 'open', minScore = 0, view = [], curId = null, lastMarked = null;
+  var label = '', archive = null, store = null, editor = null, editPtr = 0, detecting = false, storageOk = true;
+
+  var map = L.map('map', { minZoom: 2, maxZoom: 19, fadeAnimation: false, preferCanvas: true, worldCopyJump: true }).setView([30, 120], 3);
+  L.tileLayer(BASEMAP.url, { maxZoom: BASEMAP.maxZoom, className: 'osm', attribution: BASEMAP.attribution }).addTo(map);
+  var dots = L.layerGroup().addTo(map);
+  var focus = L.layerGroup().addTo(map);
+
+  function toast(msg, ms) {
+    var t = $('toast'); t.textContent = msg; t.style.display = 'block';
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.style.display = 'none'; }, ms || 2200);
+  }
+  function stamp() {
+    var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+  }
+  function download(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+  }
+
+  // ---------- 状态行 ----------
+  var busyText = '';
+  function renderStatus() {
+    var el = $('status'), warn = false, s;
+    if (busyText) s = busyText;
+    else if (!label) s = '还没打开存档';
+    else if (!state.source) { s = label + ' · 还没检测断头'; warn = true; }
+    else if (state.source !== label) { s = '⚠ 标记来自 ' + state.source + '，当前是 ' + label + '：点「检测」（标记会自动沿用）'; warn = true; }
+    else {
+      s = label + ' · 检测于 ' + (state.updated || '').slice(0, 10);
+      if ((state.edits || 0) !== editPtr) { s += ' · 编辑后还没重新检测'; warn = true; }
+    }
+    el.textContent = s;
+    el.classList.toggle('warn', warn);
+    $('b-detect').disabled = !store || detecting;
+    $('b-detect').classList.toggle('primary', !!store && !detecting && (state.source !== label || (state.edits || 0) !== editPtr));
+    $('b-detect').textContent = detecting ? '检测中…' : state.source === label ? '重新检测' : '检测';
+  }
+  function busy(t) { busyText = t || ''; renderStatus(); }
+
+  // ---------- 标记状态的保存（合并连续的改动，300ms 后写一次） ----------
+  var saveTimer = null, saveChain = Promise.resolve();
+  function saveState(now) {
+    clearTimeout(saveTimer);
+    var run = function () {
+      saveChain = saveChain.then(function () { return FogDB.set('state', state); }).catch(function (e) {
+        if (storageOk) toast('标记保存失败（浏览器不允许本地存储？）：' + e.message, 5000);
+        storageOk = false;
+      });
+      return saveChain;
+    };
+    if (now) return run();
+    saveTimer = setTimeout(run, 300);
+    return Promise.resolve();
+  }
+
+  function setState(st) {
+    state = st && Array.isArray(st.points) ? st : { points: [] };
+    points = state.points;
+    byId = {};
+    points.forEach(function (p) { byId[p.id] = p; });
+    snapCache = null;
+    if (curId && !byId[curId]) curId = null;
+  }
+
+  // ---------- 列表 / 卡片 / 地图点 ----------
+  function zoomFor(p) {
+    var m = Math.max(p.length_m, p.forward_m);
+    return m < 200 ? 17 : m < 800 ? 16 : m < 3000 ? 15 : 14;
+  }
+
+  function recompute() {
+    var c = { open: 0, ignored: 0, done: 0 };
+    points.forEach(function (p) { c[p.status] = (c[p.status] || 0) + 1; });
+    $('n-open').textContent = c.open; $('n-ignored').textContent = c.ignored;
+    $('n-done').textContent = c.done; $('n-all').textContent = points.length;
+    view = points.filter(function (p) {
+      return (filter === 'all' || p.status === filter) && p.score >= minScore;
+    }).sort(function (a, b) { return b.score - a.score || b.length_m - a.length_m; });
+  }
+
+  function idx() { for (var i = 0; i < view.length; i++) if (view[i].id === curId) return i; return -1; }
+
+  // 地图上画所有 ≥ 最低分 的点（不受上面的分类筛选影响）：待处理红色在上，标过的灰色、小一号、垫在下面
+  var markers = {};
+  function dotStyle(p) {
+    return p.status === 'open' ? { radius: 5, color: COLOR.open, weight: 2, opacity: 1, fillOpacity: 0.25 }
+                               : { radius: 4, color: '#262626', weight: 1.5, opacity: 0.9, fillColor: COLOR[p.status], fillOpacity: 0.95 };   // 实心灰点 + 深色描边：灰底图上也看得清
+  }
+  function renderDots() {
+    dots.clearLayers(); markers = {};
+    points.filter(function (p) { return p.score >= minScore; })
+      .sort(function (a, b) { return (a.status === 'open') - (b.status === 'open'); })
+      .forEach(function (p) {
+        var m = L.circleMarker([p.lat, p.lng], dotStyle(p));
+        m.on('click', function () { select(p.id, false); });
+        markers[p.id] = m;
+        dots.addLayer(m);
+      });
+  }
+  function restyle(list) {   // 只改状态变了的点，不重建全部
+    list.forEach(function (p) {
+      var m = markers[p.id];
+      if (!m) return;
+      m.setStyle(dotStyle(p));
+      if (p.status === 'open') m.bringToFront();
+    });
+  }
+
+  function renderList() {
+    var list = $('list'); list.innerHTML = '';
+    $('listcount').textContent = view.length + ' 处';
+    var frag = document.createDocumentFragment();
+    view.forEach(function (p, i) {
+      var d = document.createElement('div');
+      d.className = 'row' + (p.id === curId ? ' cur' : '') + (p.present === false ? ' absent' : '');
+      d.dataset.id = p.id;
+      d.innerHTML = '<span class="r">#' + (i + 1) + '</span><b>' + Math.round(p.score) + '</b>' +
+        '<span class="s-' + p.status + '">' + KIND[p.kind] + '</span><span>' + p.length_m + ' m</span>';
+      d.onclick = function () { select(p.id, true); };
+      frag.appendChild(d);
+    });
+    list.appendChild(frag);
+  }
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function renderCard() {
+    var i = idx(), card = $('card');
+    var p = i >= 0 ? view[i] : byId[curId];   // 在地图上点了不在当前列表里的点（比如灰点）也显示
+    if (!p) {
+      card.innerHTML = '<div id="empty">' + (!label ? '先打开一个存档。' : !points.length ? '还没有检测结果：点上方的「检测」。' : view.length ? '从列表里选一处。' :
+        filter === 'open' && minScore === 0 ? '待处理的都处理完了。' : '这个筛选下没有点。') + '</div>';
+      focus.clearLayers();
+      return;
+    }
+    card.innerHTML =
+      '<div class="rank"><span>' + (i >= 0 ? '#' + (i + 1) + ' / ' + view.length : '不在当前列表') + '</span><span class="pill s-' + p.status + '">' + STATUS[p.status] + '</span></div>' +
+      '<div class="score"><b>' + Math.round(p.score) + '</b><span>置信度 · ' + KIND[p.kind] + '</span></div>' +
+      '<div class="meter"><i style="width:' + p.score + '%"></i></div>' +
+      '<dl>' +
+      '<dt>突出长度</dt><dd>' + p.length_m + ' m</dd>' +
+      '<dt>前方空旷</dt><dd>' + p.forward_m + ' m' + (p.forward_px >= 99 ? '+' : '') + '</dd>' +
+      '<dt>离别的轨迹</dt><dd>' + p.touch_m + ' m' + (p.touch_px >= 99 ? '+' : '') + '</dd>' +
+      '<dt>坐标</dt><dd>' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) + '</dd>' +
+      (p.status !== 'open' ? '<dt>标记</dt><dd>' + esc((p.marked_at || '').slice(0, 10)) + (p.marked_in ? ' · ' + esc(p.marked_in) : '') + '</dd>' : '') +
+      (p.present === false ? '<dt>本存档</dt><dd class="absent-note">没检测到这个断头（已修好，或标记来自别的存档）</dd>' : '') +
+      '<dt>ID</dt><dd title="' + esc(p.id) + '">' + esc(String(p.id).slice(0, 8)) + '</dd>' +
+      '</dl>' +
+      '<div class="actions">' +
+      '<button class="ign" id="b-ign"' + (p.status === 'ignored' ? ' disabled' : '') + '>不需要处理<kbd>X</kbd></button>' +
+      '<button class="done" id="b-done"' + (p.status === 'done' ? ' disabled' : '') + '>已处理<kbd>D</kbd></button>' +
+      '</div>' +
+      '<div class="nav">' +
+      '<button id="b-prev">上一个<kbd>K</kbd></button>' +
+      '<button id="b-open"' + (p.status === 'open' ? ' disabled' : '') + '>恢复待处理<kbd>U</kbd></button>' +
+      '<button id="b-next">下一个<kbd>J</kbd></button>' +
+      '</div>' +
+      '<div class="links"><a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng + '">Google 地图</a>' +
+      '<a target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=' + p.lat + '&mlon=' + p.lng + '#map=17/' + p.lat + '/' + p.lng + '">OSM</a>' +
+      '<a href="#" id="b-recenter">回到该点</a></div>';
+    $('b-ign').onclick = function () { mark('ignored'); };
+    $('b-done').onclick = function () { mark('done'); };
+    $('b-open').onclick = function () { mark('open'); };
+    $('b-prev').onclick = function () { step(-1); };
+    $('b-next').onclick = function () { step(1); };
+    $('b-recenter').onclick = function (e) { e.preventDefault(); map.setView([p.lat, p.lng], zoomFor(p)); };
+    focus.clearLayers();
+    L.circleMarker([p.lat, p.lng], { radius: 13, color: '#ffd34d', weight: 3, fill: false, interactive: false }).addTo(focus);
+  }
+
+  function select(id, fly) {
+    curId = id;
+    var p = byId[id];
+    if (p && fly !== false) map.setView([p.lat, p.lng], zoomFor(p));
+    document.querySelectorAll('#list .row.cur').forEach(function (r) { r.classList.remove('cur'); });
+    var row = document.querySelector('#list .row[data-id="' + id + '"]');
+    if (row) { row.classList.add('cur'); row.scrollIntoView({ block: 'nearest' }); }
+    renderCard();
+  }
+
+  function step(d) {
+    if (!view.length) return;
+    var i = idx();
+    i = i < 0 ? 0 : Math.max(0, Math.min(view.length - 1, i + d));
+    select(view[i].id, true);
+  }
+
+  function refresh(keepIndex, changed) {
+    recompute(); renderList();
+    if (changed) restyle(changed); else renderDots();
+    if (keepIndex !== undefined && keepIndex >= 0 && idx() < 0 && view.length) {
+      select(view[Math.min(keepIndex, view.length - 1)].id, true);
+    } else {
+      select(curId, false);
+    }
+  }
+
+  // ---------- 标记 ----------
+  function setStatus(p, status) {
+    p.status = status;
+    if (status === 'open') { delete p.marked_at; delete p.marked_in; }
+    else { p.marked_at = FogDetect.nowIso(); p.marked_in = label; }
+  }
+  function snapshot(list) {
+    return list.map(function (p) { return { p: p, status: p.status, marked_at: p.marked_at, marked_in: p.marked_in }; });
+  }
+  function restore(snap) {
+    snap.forEach(function (s) {
+      s.p.status = s.status;
+      if (s.marked_at) s.p.marked_at = s.marked_at; else delete s.p.marked_at;
+      if (s.marked_in) s.p.marked_in = s.marked_in; else delete s.p.marked_in;
+    });
+  }
+  function mark(status, id) {
+    id = id || curId;
+    var p = byId[id];
+    if (!p || p.status === status) return;
+    var i = idx(), snap = snapshot([p]);
+    setStatus(p, status);
+    lastMarked = { id: id, prev: snap[0].status };
+    toast(status === 'open' ? '已恢复为待处理' : '已标记为「' + STATUS[status] + '」 · 按 U 撤销');
+    refresh(i, [p]);
+    saveState();
+  }
+  // 框选：一次标一批（只动待处理的点，已处理的不改），整批是一步，U 撤销
+  function markBatch(list, status) {
+    if (!list.length) return;
+    var snap = snapshot(list);
+    list.forEach(function (p) { setStatus(p, status); });
+    lastMarked = { batch: snap };
+    refresh(undefined, list);       // 不跳到下一个点，地图停在原处
+    saveState();
+  }
+
+  function undo() {
+    if (lastMarked && lastMarked.batch) {
+      var snap = lastMarked.batch; lastMarked = null;
+      restore(snap);
+      refresh(undefined, snap.map(function (s) { return s.p; }));
+      saveState();
+      toast('已撤销框选：' + snap.length + ' 处恢复原状');
+      return;
+    }
+    var p = curId && byId[curId];
+    if (p && p.status !== 'open') return mark('open');
+    if (!lastMarked) return;
+    var last = lastMarked;
+    mark(last.prev, last.id);
+    lastMarked = null;
+    var q = byId[last.id];
+    if (q && (filter === 'all' || q.status === filter)) select(q.id, true);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.tagName === 'INPUT') return;
+    var k = e.key.toLowerCase();
+    if (k === 'j' || k === 'arrowdown') { step(1); e.preventDefault(); }
+    else if (k === 'k' || k === 'arrowup') { step(-1); e.preventDefault(); }
+    else if (k === 'x' || k === '1') mark('ignored');
+    else if (k === 'd' || k === '2') mark('done');
+    else if (k === 'u' || k === '0') undo();
+  });
+
+  $('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    filter = b.dataset.f;
+    document.querySelectorAll('#tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    refresh(0);
+  });
+  $('minScore').addEventListener('input', function () {
+    minScore = +this.value; $('minScoreV').textContent = minScore; refresh(0);
+  });
+
+  // ---------- 检测 ----------
+  async function detect() {
+    if (detecting || !store) return;
+    detecting = true; renderStatus();
+    var pool = null, t0 = Date.now();
+    try {
+      busy('读取全部区块…');
+      var blocks = await store.loadAll(function (i, n) { busy('读取区块 ' + i + ' / ' + n); });
+      var saved = null;
+      try { saved = await FogDB.get('detcache'); } catch (e) { /* 没有缓存也能检测 */ }
+      var cache = FogDetect.memoryCache(saved);
+      pool = FogDetect.browserPool('src/detect-worker.js');
+      var r = await FogDetect.run({
+        blocks: blocks, pool: pool, cache: cache,
+        onProgress: function (done, total, info) {
+          busy('检测断头：' + done + ' / ' + total + ' 个窗口 · ' + Math.round(info.seconds) + ' 秒' + (info.reused ? '（' + info.reused + ' 个没变，直接沿用）' : ''));
+        },
+      });
+      var m = FogDetect.merge(state, r.dets, label, { edits: editPtr });
+      setState(m.state);
+      await saveState(true);
+      FogDB.set('detcache', cache.toJSON()).catch(function () {});
+      busy('');
+      refresh(0);
+      var s = m.summary;
+      toast('检测完成：' + r.dets.length + ' 处断头 · 新 ' + s.fresh + ' · 修好 ' + s.gone + ' · 沿用标记 ' + s.carried +
+            (s.missing ? ' · ' + s.missing + ' 个标记本存档没检测到' : '') + ' · ' + ((Date.now() - t0) / 1000).toFixed(1) + ' 秒', 7000);
+    } catch (e) {
+      console.error(e);
+      busy('检测失败：' + e.message);
+    } finally {
+      if (pool) pool.terminate();
+      detecting = false; renderStatus();
+    }
+  }
+  $('b-detect').onclick = detect;
+
+  // ---------- 打开存档 ----------
+  function showWelcome(show, closable) {
+    $('welcome').classList.toggle('show', show);
+    $('w-close').hidden = !closable;
+    $('w-err').style.display = 'none';
+  }
+  function welcomeError(msg) { var e = $('w-err'); e.textContent = msg; e.style.display = 'block'; }
+
+  // 文件夹 → zip（只收区块文件；还在 iCloud 云端没下载的会提示）
+  async function zipFromFiles(files, folder) {
+    var z = new JSZip(), n = 0, cloud = 0;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i], name = f.name;
+      if (name.charAt(0) === '.') { if (/\.icloud$/.test(name)) cloud++; continue; }
+      if (!FogDecoder.decodeFilename(name)) continue;
+      z.file('Sync/' + name, await f.arrayBuffer(), { binary: true });
+      n++;
+    }
+    if (!n) throw new Error(cloud ? '这个文件夹里的 ' + cloud + ' 个区块都还在 iCloud 云端：先在 Finder 里下载' : '「' + folder + '」里没有世界迷雾的区块文件');
+    if (cloud) toast('有 ' + cloud + ' 个区块还在 iCloud 云端没下载，这次没读到它们', 8000);
+    return z.generateAsync({ type: 'blob', compression: 'STORE' });
+  }
+
+  async function chooseArchive(blob, name) {
+    $('w-err').style.display = 'none';
+    var test;
+    try {
+      test = await FogDecoder.open(await blob.arrayBuffer());
+    } catch (e) { welcomeError('打不开这个文件：' + e.message); return; }
+    if (!test.entries.some(function (e) { return e.blockNo !== null; })) { welcomeError('这不是世界迷雾的同步存档（里面没有区块文件）'); return; }
+    var saved = false;
+    try { await FogDB.set('archive', { name: name, blob: blob, size: blob.size, saved: FogDetect.nowIso() }); saved = true; } catch (e) { /* 存不下：只在这次会话里打开 */ }
+    if (archive && saved) { location.reload(); return; }   // 已经开着一个：刷新，干净地换成新的
+    if (archive) { welcomeError('浏览器不允许本地存储，没法切换存档；刷新页面后再选'); return; }
+    showWelcome(false);
+    await openArchive(test, name);
+  }
+
+  async function openArchive(arc, name) {
+    archive = arc; label = name;
+    renderStatus();
+    store = FogStore.create(archive);
+    var fog = createFogLayer(null, { source: store, color: [80, 220, 140] });
+    editor = FogEditor.attach({
+      map: map, store: store, layer: fog, toast: toast,
+      onChange: function (s) { editPtr = s.ptr; renderStatus(); },
+      box: {
+        label: '框选',
+        hint: '拖出矩形：框里的红点 → 不需要处理（U 撤销）',
+        count: function (b) { return '框内 ' + inBox(b).length + ' 处待处理'; },
+        apply: function (b) {
+          var list = inBox(b);
+          if (!list.length) { toast('框里没有待处理的点'); return; }
+          markBatch(list, 'ignored');
+          toast('已把 ' + list.length + ' 处标为「不需要处理」 · 按 U 撤销');
+        },
+      },
+      snapPoints: function () {   // 当前存档里检测到的断头都可吸附（别的存档带来的标记点不算）
+        if (!snapCache) snapCache = points.filter(function (p) { return p.present !== false; }).map(function (p) { return [p.px, p.py]; });
+        return snapCache;
+      },
+      api: {
+        load: function () { return FogDB.get('edits:' + label).then(function (d) { return d || { ops: [], ptr: 0 }; }, function () { return { ops: [], ptr: 0 }; }); },
+        save: function (doc) {
+          var d = { base: label, ops: doc.ops, ptr: doc.ptr, exported_ptr: doc.exported_ptr, updated: FogDetect.nowIso() };
+          return FogDB.set('edits:' + label, d);
+        },
+      },
+    });
+    busy('回放编辑记录…');
+    var ed = await editor.ready;
+    editPtr = ed.ptr;
+    fog.addTo(map);
+    busy('');
+    if (!curId) {
+      var b = fogDataBounds(archive);
+      if (b) map.fitBounds(b);
+    }
+    if (ed.ptr) toast('已回放 ' + ed.ptr + ' 步编辑');
+    // 第一次打开、或换了存档：自动检测（标记按位置和方向沿用）
+    if (state.source !== label) detect();
+  }
+
+  $('w-zip').onclick = function () { $('f-zip').click(); };
+  $('w-dir').onclick = function () { $('f-dir').click(); };
+  $('w-close').onclick = function () { showWelcome(false); };
+  $('f-zip').onchange = function () { var f = this.files[0]; this.value = ''; if (f) chooseArchive(f, f.name); };
+  $('f-dir').onchange = async function () {
+    var files = Array.from(this.files); this.value = '';
+    if (!files.length) return;
+    var folder = (files[0].webkitRelativePath || 'Sync').split('/')[0];
+    try { chooseArchive(await zipFromFiles(files, folder), folder + '/'); } catch (e) { welcomeError(e.message); }
+  };
+
+  // 拖放：zip 文件或文件夹
+  function readDir(entry) {
+    return new Promise(function (resolve, reject) {
+      var out = [], reader = entry.createReader();
+      (function next() {
+        reader.readEntries(function (ents) {
+          if (!ents.length) { Promise.all(out).then(resolve, reject); return; }
+          ents.forEach(function (en) { if (en.isFile) out.push(new Promise(function (res, rej) { en.file(res, rej); })); });
+          next();
+        }, reject);
+      })();
+    });
+  }
+  var dragDepth = 0;
+  document.addEventListener('dragenter', function (e) { e.preventDefault(); dragDepth++; showWelcome(true, !!archive); $('welcome').classList.add('drag'); });
+  document.addEventListener('dragleave', function () { if (--dragDepth <= 0) { dragDepth = 0; $('welcome').classList.remove('drag'); if (archive) showWelcome(false); } });
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', async function (e) {
+    e.preventDefault(); dragDepth = 0; $('welcome').classList.remove('drag');
+    var item = e.dataTransfer.items && e.dataTransfer.items[0];
+    var entry = item && item.webkitGetAsEntry && item.webkitGetAsEntry();
+    try {
+      if (entry && entry.isDirectory) chooseArchive(await zipFromFiles(await readDir(entry), entry.name), entry.name + '/');
+      else if (e.dataTransfer.files[0]) chooseArchive(e.dataTransfer.files[0], e.dataTransfer.files[0].name);
+    } catch (err) { welcomeError(err.message); }
+  });
+
+  // ---------- 菜单：存档与标记 ----------
+  $('b-menu').onclick = function (e) { e.stopPropagation(); $('menu').classList.toggle('open'); };
+  document.addEventListener('click', function () { $('menu').classList.remove('open'); });
+  $('m-open').onclick = function () { showWelcome(true, !!archive); };
+  $('m-export').onclick = function () {
+    download(new Blob([JSON.stringify(state)], { type: 'application/json' }), 'fog-trace-marks-' + stamp() + '.json');
+    var n = points.filter(function (p) { return p.status !== 'open'; }).length;
+    toast('已导出 ' + points.length + ' 个点（其中 ' + n + ' 个已标记）');
+  };
+  $('m-import').onclick = function () { $('f-marks').click(); };
+  $('f-marks').onchange = async function () {
+    var f = this.files[0]; this.value = '';
+    if (!f) return;
+    var st;
+    try { st = JSON.parse(await f.text()); } catch (e) { toast('不是有效的 JSON：' + e.message, 5000); return; }
+    if (!st || !Array.isArray(st.points)) { toast('格式不对：需要 { points: [...] }（导出标记 / tools/deadends.py 生成的文件）', 6000); return; }
+    importState(st, true);
+  };
+  async function importState(st, ask) {
+    var have = points.filter(function (p) { return p.status !== 'open'; }).length;
+    var come = st.points.filter(function (p) { return p.status === 'ignored' || p.status === 'done'; }).length;
+    if (ask && have && !confirm('导入会替换当前的全部标记（现在有 ' + have + ' 个已标记的点，文件里有 ' + come + ' 个）。继续？')) return;
+    setState(st);
+    await saveState(true);
+    refresh(0);
+    toast('已导入 ' + st.points.length + ' 个点（' + come + ' 个已标记）', 4000);
+    if (store && state.source !== label) detect();
+    else renderStatus();
+  }
+
+  var snapCache = null;
+  // 框选范围内、地图上可见（≥ 最低分）的待处理点
+  function inBox(b) {
+    return points.filter(function (p) { return p.status === 'open' && p.score >= minScore && b.contains([p.lat, p.lng]); });
+  }
+
+  // ---------- 启动 ----------
+  (async function boot() {
+    try { setState(await FogDB.get('state')); }
+    catch (e) { storageOk = false; toast('浏览器不允许本地存储：这次的标记和编辑不会保存', 6000); }
+    refresh(0);
+    var saved = null;
+    try { saved = await FogDB.get('archive'); } catch (e) { /* 同上 */ }
+    if (!saved) { showWelcome(true, false); renderStatus(); return; }
+    busy('打开 ' + saved.name + '…');
+    try { await openArchive(await FogDecoder.open(await saved.blob.arrayBuffer()), saved.name); }
+    catch (e) { busy(''); showWelcome(true, false); welcomeError('上次的存档打不开了：' + e.message); }
+  })();
+
+  window.__review = { mark: mark, select: select, map: map, detect: detect, chooseArchive: chooseArchive, importState: importState,
+    get view() { return view; }, get points() { return points; }, get markers() { return markers; },
+    get editor() { return editor; }, get state() { return state; }, get detecting() { return detecting; } };
+})();
+</script>
+</body>
+</html>

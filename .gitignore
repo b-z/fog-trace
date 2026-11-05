@@ -1,0 +1,13 @@
+# 不提交任何存档 / 位置数据：只有代码
+*.zip
+*.fwss
+Sync/
+data/
+samples/
+*.json.bak
+review*.json
+fog-trace-marks-*.json
+.DS_Store
+.venv/
+__pycache__/
+node_modules/
