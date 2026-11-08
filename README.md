@@ -39,9 +39,8 @@ The page is available in English, Chinese and Japanese (switch at the top right)
 | Dead-end detection | Finds where tracks stick out without connecting to anything: the start and end of trips, turning back, lost GPS signal. Each place gets a confidence from 0 to 100 |
 | Review | Sorted by confidence. The tabs filter the list; the map always shows every point (red = to review, gray = reviewed). A "Min score" slider hides weak candidates |
 | Box `B` | Drag a box to mark every red point inside as "ignored" at once; handy for clearing a whole area of false detections |
-| Eraser `E` | Drag to erase. `[` `]` change the size; hold Space to pan; zoom in to level 12 or more |
-| Pen `P` | A 1-pixel line, as thin as the tracks. Click to add points; right-click, double-click or `Enter` to finish; `Backspace` removes the last point, `Esc` cancels |
-| Snapping | Pen points snap to nearby dead ends and line ends (solid ring), otherwise to the nearest track pixel (dashed ring). Hold `⌥` to turn snapping off |
+| Eraser `E` | Drag to erase. Click a point, then hold `⇧` and click another to erase the straight line between them. `[` `]` change the size; hold Space to pan; zoom in to level 12 or more |
+| Pen `C` | A 1-pixel line, as thin as the tracks, through exactly the points you click. Right-click, double-click or `Enter` to finish; `Backspace` removes the last point, `Esc` cancels |
 | Undo `⌘Z` / Redo `⇧⌘Z` | One erase stroke or one line is one step |
 | Export archive | Only the blocks you changed are re-encoded; every other file is copied byte for byte. A block erased to nothing is left out, as the app itself does |
 
@@ -121,7 +120,7 @@ npx wrangler@4 pages deploy web --project-name fog-trace --branch main
 | `web/src/geo.js` | Latitude / longitude ↔ world pixels |
 | `web/src/fog-layer.js` | Leaflet layer that draws the tracks |
 | `web/src/fog-store.js` | Editable archive: erase / draw, diffs for undo, block encoding and export |
-| `web/src/editor.js` | Map editing: toolbar, eraser, pen with snapping, box selection |
+| `web/src/editor.js` | Map editing: toolbar, eraser (with straight lines), pen, box selection |
 | `web/src/detect-core.js` | Dead-end detection for one window |
 | `web/src/detect.js` | Windows, worker pool, cache, dedupe, merging marks |
 | `web/src/detect-worker.js` | Web Worker |

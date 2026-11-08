@@ -8,16 +8,15 @@
  * api    = { load(): Promise<{ops, ptr, exported_ptr}>, save(doc): Promise }
  * t        = function (key, params) 界面文字，默认用 FogI18n.t（src/i18n.js）
  * onChange = function ({ops, ptr, exportedPtr})  每次编辑 / 撤销 / 重做 / 导出后调用，可省略
- * snapPoints = function () → [[x, y], ...]  可吸附的端点（世界像素，像素中心 = 整数 + 0.5），可省略
  * box  = { label, hint, count(bounds) → n, apply(bounds) }  可省略；提供时多一个「框选」工具（B），
  *        拖出矩形后把 L.LatLngBounds 交给 apply，拖动中用 count 显示框内数量
  *
  * 操作方式
  *   浏览 V：拖动平移、滚轮缩放（编辑模式下滚轮也能缩放）
  *   橡皮擦 E：按住左键拖动擦除；圆圈大小是屏幕像素，[ / ] 调整；按住空格临时拖动地图；需放大到 12 级以上
- *   画笔 P：1px 线（与轨迹同宽）。单击加点，右键 / 双击 / Enter 结束，Backspace 删上一个点，Esc 取消；
- *          拖动仍是平移地图；切换到别的工具或导出时自动完成当前折线
- *          吸附：顶点自动接到附近的端点（检测出的断头、画过的线的两端），其次接到附近的轨迹像素；按住 ⌥ 不吸附
+ *          按住 ⇧ 点一下：从上一个擦除点到这里的整段直线擦掉（预览是半透明的白带）
+ *   画笔 C：1px 线（与轨迹同宽），顶点就是点击的位置。单击加点，右键 / 双击 / Enter 结束，Backspace 删上一个点，
+ *          Esc 取消；拖动仍是平移地图；切换到别的工具或导出时自动完成当前折线
  *   框选 B（有 box 时）：按住左键拖出矩形；按住空格临时拖地图，Esc 取消
  *   撤销 ⌘Z / 重做 ⇧⌘Z：画到一半时 ⌘Z 只删上一个点
  * 每一笔（一次拖擦 / 一条折线）是一步，记录成世界像素坐标的矢量操作，存到服务器，刷新后回放。
@@ -27,8 +26,6 @@
 
   var MIN_ERASE_ZOOM = 12;
   var PEN_W = 1;                 // 画笔线宽（世界像素）= 原轨迹宽度
-  var SNAP_END_PX = 14;          // 吸附半径（屏幕像素）：端点
-  var SNAP_TRACK_PX = 8;         //                     轨迹像素
 
   function attach(o) {
     var map = o.map, store = o.store, layer = o.layer, api = o.api;
@@ -42,7 +39,7 @@
     var queue = Promise.resolve(), busy = 0;
     var stroke = null, spaceDown = false;                       // 橡皮擦状态
     var penPts = [], penLine = null, penRubber = null, mouseLL = null;  // 画笔状态
-    var snapMark = null, lastMouse = null;                               // 吸附提示
+    var eraseLast = null, eraseLine = null;                              // 橡皮擦：上一个点、⇧ 直线预览
     var box = null, boxRect = null;                                      // 框选状态
 
     function enqueue(fn) {
@@ -75,10 +72,10 @@
       '<div class="seg">' +
       '<button data-tool="pan" title="' + t('e.pan') + ' (V)">' + t('e.pan') + '<kbd>V</kbd></button>' +
       '<button data-tool="erase" title="' + t('e.erase') + ' (E)">' + t('e.erase') + '<kbd>E</kbd></button>' +
-      '<button data-tool="pen" title="' + t('e.pen') + ' (P)">' + t('e.pen') + '<kbd>P</kbd></button>' +
+      '<button data-tool="pen" title="' + t('e.pen') + ' (C)">' + t('e.pen') + '<kbd>C</kbd></button>' +
       (o.box ? '<button data-tool="box" title="' + o.box.label + ' (B)">' + o.box.label + '<kbd>B</kbd></button>' : '') +
       '</div>' +
-      '<label class="opt opt-erase">' + t('e.size') + ' <input type="range" min="4" max="80" step="2" value="' + eraserPx + '"><span></span></label>' +
+      '<label class="opt opt-erase">' + t('e.size') + ' <input type="range" min="4" max="80" step="2" value="' + eraserPx + '"><span></span><span class="hint">' + t('e.eraseHint') + '</span></label>' +
       '<span class="opt opt-pen">' + t('e.penHint') + '</span>' +
       (o.box ? '<span class="opt opt-box">' + (o.box.hint || '') + '</span>' : '') +
       '<div class="seg"><button data-act="undo" title="' + t('e.undo') + '">↶</button><button data-act="redo" title="' + t('e.redo') + '">↷</button></div>' +
@@ -124,7 +121,8 @@
 
     function setTool(t) {
       if (t === tool) return;
-      if (tool === 'pen') { finishPen(true); showSnap(null); }
+      if (tool === 'pen') finishPen(true);
+      eraseLast = null; showEraseLine(null);
       if (tool === 'erase') endStroke();
       if (tool === 'box') cancelBox();
       tool = t;
@@ -171,8 +169,17 @@
       cursor.style.display = 'block';
       cursor.style.left = p.x + 'px'; cursor.style.top = p.y + 'px';
     }
+    // ⇧ 直线预览：上一个擦除点 → 鼠标，宽度就是将擦掉的宽度
+    function showEraseLine(ll) {
+      if (!ll || !eraseLast || tool !== 'erase') { if (eraseLine) { map.removeLayer(eraseLine); eraseLine = null; } return; }
+      var lls = [toLL(eraseLast), ll];
+      if (!eraseLine) eraseLine = L.polyline(lls, { color: '#fff', opacity: 0.35, lineCap: 'round', interactive: false }).addTo(map);
+      else eraseLine.setLatLngs(lls);
+      eraseLine.setStyle({ weight: 2 * eraserPx });
+    }
     container.addEventListener('mousemove', function (e) {
       moveCursor(e);
+      if (tool === 'erase' && !stroke) showEraseLine(e.shiftKey ? map.mouseEventToLatLng(e) : null);
       if (box) moveBox(e);
       if (!stroke) return;
       var w = world(map.mouseEventToLatLng(e)), last = stroke.pts[stroke.pts.length - 1];
@@ -189,15 +196,19 @@
       e.preventDefault();
       if (map.getZoom() < MIN_ERASE_ZOOM) { toast(t('e.zoomIn', { z: MIN_ERASE_ZOOM })); return; }
       var w = world(map.mouseEventToLatLng(e)), r = Math.round(eraserPx * wpp() * 100) / 100;
-      stroke = { r: r, pts: [w], diff: store.newDiff() };
+      // 按住 ⇧ 点：从上一个擦除点到这里，整段直线擦掉
+      var a = e.shiftKey && eraseLast ? eraseLast : w;
+      showEraseLine(null);
+      stroke = { r: r, pts: a === w ? [w] : [a, w], diff: store.newDiff() };
       var s = stroke;
       enqueue(function () {
-        return store.paintSegment([w[0], w[1], w[0], w[1]], r, 0, s.diff).then(function () { refresh(segRect(w, w, r)); });
+        return store.paintSegment([a[0], a[1], w[0], w[1]], r, 0, s.diff).then(function () { refresh(segRect(a, w, r)); });
       });
     });
     function endStroke() {
       if (!stroke) return;
       var s = stroke; stroke = null;
+      eraseLast = s.pts[s.pts.length - 1];
       enqueue(function () {
         if (!s.diff.entries.size) return;          // 没擦到任何像素：不记一步
         commit({ type: 'erase', r: s.r, pts: s.pts }, s.diff);
@@ -206,70 +217,7 @@
     document.addEventListener('mouseup', endStroke);
 
     // ---------- 折线画笔 ----------
-    var BLOCK = G.BLOCK_PX, NB = G.N;
     function toLL(w) { return L.latLng(G.worldYToLat(w[1]), G.worldXToLng(w[0])); }
-    function center(w) { return [Math.floor(w[0]) + 0.5, Math.floor(w[1]) + 0.5]; }
-    // 遍历世界像素矩形 [x0,x1)×[y0,y1) 内的轨迹像素（只看已载入的区块，同步）
-    function forEachTrackPixel(x0, y0, x1, y1, cb) {
-      for (var by = Math.floor(y0 / BLOCK); by <= Math.floor((y1 - 1) / BLOCK); by++) {
-        for (var bx = Math.floor(x0 / BLOCK); bx <= Math.floor((x1 - 1) / BLOCK); bx++) {
-          var st = store.peek(by * NB + bx);
-          if (!st) continue;
-          var ox = bx * BLOCK, oy = by * BLOCK;
-          st.forEachSetPixelInRect(x0 - ox, y0 - oy, x1 - ox, y1 - oy, function (x, y) { cb(x + ox, y + oy); });
-        }
-      }
-    }
-    // 端点所在处还有轨迹吗（被擦掉的断头不再吸附）；区块没载入时当作有
-    function trackNear(p) {
-      var x = Math.floor(p[0]), y = Math.floor(p[1]);
-      var bx = Math.floor(x / BLOCK), by = Math.floor(y / BLOCK);
-      if (!store.peek(by * NB + bx)) return true;
-      var hit = false;
-      forEachTrackPixel(x - 1, y - 1, x + 2, y + 2, function () { hit = true; });
-      return hit;
-    }
-    function endpoints() {
-      var out = o.snapPoints ? o.snapPoints().slice() : [];
-      for (var i = 0; i < ptr; i++) {
-        var op = ops[i];
-        if (op.type === 'line') { out.push(op.pts[0]); out.push(op.pts[op.pts.length - 1]); }
-      }
-      return out;
-    }
-    // 鼠标位置 → 顶点：优先最近的端点，其次最近的轨迹像素，否则所在像素的中心
-    function snapAt(w, off) {
-      if (off) return { w: center(w), kind: null };
-      var k = wpp();
-      var rEnd = Math.min(Math.max(SNAP_END_PX * k, 2), 256), rTrk = Math.min(Math.max(SNAP_TRACK_PX * k, 1.5), 64);
-      var cands = [];
-      endpoints().forEach(function (p) {
-        var d = Math.hypot(p[0] - w[0], p[1] - w[1]);
-        if (d <= rEnd) cands.push([d, p]);
-      });
-      cands.sort(function (a, b) { return a[0] - b[0]; });
-      for (var i = 0; i < cands.length; i++) {
-        if (trackNear(cands[i][1])) return { w: center(cands[i][1]), kind: 'end' };
-      }
-      var best = null, bd = rTrk * rTrk;
-      forEachTrackPixel(Math.floor(w[0] - rTrk), Math.floor(w[1] - rTrk), Math.ceil(w[0] + rTrk), Math.ceil(w[1] + rTrk), function (x, y) {
-        var dx = x + 0.5 - w[0], dy = y + 0.5 - w[1], d = dx * dx + dy * dy;
-        if (d <= bd) { bd = d; best = [x + 0.5, y + 0.5]; }
-      });
-      if (best) return { w: best, kind: 'track' };
-      return { w: center(w), kind: null };
-    }
-    function showSnap(sn) {
-      if (!sn || !sn.kind) { if (snapMark) { map.removeLayer(snapMark); snapMark = null; } return; }
-      var half = Math.pow(2, map.getZoom() - 14) / 2;   // 半个像素的屏幕尺寸：圈要套住整个像素
-      var style = sn.kind === 'end' ? { radius: Math.max(8, half * 1.5 + 5), color: '#4df0ff', weight: 2.5, fill: false } :
-                                      { radius: Math.max(5, half * 1.5 + 3), color: '#4df0ff', weight: 1.5, dashArray: '3 3', fill: false };
-      if (snapMark && (snapMark.options.radius !== style.radius || snapMark.options.weight !== style.weight)) { map.removeLayer(snapMark); snapMark = null; }
-      if (!snapMark) snapMark = L.circleMarker(toLL(sn.w), L.extend({ interactive: false }, style)).addTo(map);
-      else snapMark.setLatLng(toLL(sn.w));
-      snapMark.bringToFront();
-    }
-
     var penDots = L.layerGroup().addTo(map);
     function drawPen() {
       var lls = penPts.map(function (p) { return p.ll; });
@@ -283,7 +231,6 @@
       penRubber.setLatLngs(lls.length && mouseLL ? [lls[lls.length - 1], mouseLL] : []);
       penDots.clearLayers();
       lls.forEach(function (ll) { L.circleMarker(ll, { radius: 3, color: '#ffd34d', fillOpacity: 1, interactive: false }).addTo(penDots); });
-      if (snapMark) snapMark.bringToFront();
     }
     map.on('zoomend', function () { if (penPts.length) drawPen(); });
     function cancelPen() {
@@ -308,22 +255,14 @@
         commit(op, d);
       });
     }
-    function hover(latlng, alt) {
-      lastMouse = { latlng: latlng, alt: alt };
-      var sn = snapAt(world(latlng), alt);
-      showSnap(sn);
-      mouseLL = toLL(sn.w);
-      if (penPts.length) drawPen();
-      return sn;
-    }
     map.on('click', function (e) {
       if (tool !== 'pen') return;
-      var sn = snapAt(world(e.latlng), e.originalEvent.altKey), last = penPts[penPts.length - 1];
-      if (last) {   // 双击的第二下、或吸附到同一点：不重复加点
-        var a = map.latLngToContainerPoint(last.ll), b = map.latLngToContainerPoint(toLL(sn.w));
-        if ((sn.w[0] === last.w[0] && sn.w[1] === last.w[1]) || a.distanceTo(b) < 3) return;
+      var w = world(e.latlng), last = penPts[penPts.length - 1];   // 落点就是点击的位置（不取整到像素）
+      if (last) {   // 双击的第二下：不重复加点
+        var a = map.latLngToContainerPoint(last.ll), b = map.latLngToContainerPoint(e.latlng);
+        if (a.distanceTo(b) < 3) return;
       }
-      penPts.push({ w: sn.w, ll: toLL(sn.w) });
+      penPts.push({ w: w, ll: toLL(w) });
       drawPen(); render();
     });
     map.on('dblclick', function () { if (tool === 'pen') finishPen(); });
@@ -332,8 +271,7 @@
       e.preventDefault();
       finishPen();
     });
-    map.on('mousemove', function (e) { if (tool === 'pen') hover(e.latlng, e.originalEvent.altKey); });
-    map.on('mouseout', function () { showSnap(null); });
+    map.on('mousemove', function (e) { if (tool === 'pen') { mouseLL = e.latlng; if (penPts.length) drawPen(); } });
 
     // ---------- 框选 ----------
     function boxBounds(e) { return L.latLngBounds(box.start, map.mouseEventToLatLng(e)); }
@@ -395,13 +333,12 @@
       var tag = e.target.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
       var k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
-      if (e.key === 'Alt' && tool === 'pen' && lastMouse) { hover(lastMouse.latlng, true); return; }
       if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
       if (mod && k === 'y') { e.preventDefault(); redo(); return; }
       if (mod || e.altKey) return;
       if (k === 'v') setTool('pan');
       else if (k === 'e') setTool('erase');
-      else if (k === 'p') setTool('pen');
+      else if (k === 'c') setTool('pen');
       else if (k === 'b' && o.box) setTool('box');
       else if (k === 'escape') { if (penPts.length) cancelPen(); else if (box) cancelBox(); else setTool('pan'); }
       else if (k === 'enter' && tool === 'pen') { e.preventDefault(); finishPen(); }
@@ -414,7 +351,7 @@
       }
     });
     document.addEventListener('keyup', function (e) {
-      if (e.key === 'Alt' && tool === 'pen' && lastMouse) hover(lastMouse.latlng, false);
+      if (e.key === 'Shift') showEraseLine(null);
       if (e.key === ' ' && spaceDown) { spaceDown = false; if (tool === 'erase' || tool === 'box') map.dragging.disable(); render(); }
     });
 
@@ -432,7 +369,7 @@
     return {
       ready: ready,
       setTool: setTool, undo: undo, redo: redo, exportZip: exportZip,
-      store: store, snapAt: function (w, off) { return snapAt(w, off); },
+      store: store,
       get state() { return { tool: tool, ops: ops.length, ptr: ptr, exportedPtr: exportedPtr, busy: busy, penPts: penPts.length }; },
       idle: function () { return queue; },
     };

@@ -33,6 +33,7 @@
     opts = opts || {};
     var G = global.FogGeo;
     var color = opts.color || [80, 220, 140];
+    var alpha = opts.alpha == null ? 255 : opts.alpha;   // 0–255，略透明能看见底图
     var TILE = 256;
     var source = opts.source || archiveSource(archive);
 
@@ -71,7 +72,7 @@
             for (var yy = oy; yy < oy + q && yy < h; yy++) {
               for (var xx = ox; xx < ox + q && xx < w; xx++) {
                 var p = (yy * w + xx) * 4;
-                d[p] = color[0]; d[p + 1] = color[1]; d[p + 2] = color[2]; d[p + 3] = 255;
+                d[p] = color[0]; d[p + 1] = color[1]; d[p + 2] = color[2]; d[p + 3] = alpha;
               }
             }
           });

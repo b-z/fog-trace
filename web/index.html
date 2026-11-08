@@ -119,6 +119,7 @@
   .fog-edit-bar .export { border: 1px solid #2f5f8f; border-radius: 6px; color: #9cc8ff; }
   .fog-edit-bar .opt { display: flex; gap: 5px; align-items: center; color: var(--muted); }
   .fog-edit-bar .opt input { width: 90px; }
+  .fog-edit-bar .opt .hint { margin-left: 6px; }
   .fog-edit-bar kbd { margin-left: 5px; }
   .edit-status { color: var(--muted); }
   .edit-status.warn { color: var(--accent); }
@@ -307,7 +308,6 @@
     points = state.points;
     byId = {};
     points.forEach(function (p) { byId[p.id] = p; });
-    snapCache = null;
     if (curId && !byId[curId]) curId = null;
   }
 
@@ -599,7 +599,7 @@
     archive = arc; label = name;
     renderStatus();
     store = FogStore.create(archive);
-    var fog = createFogLayer(null, { source: store, color: [80, 220, 140] });
+    var fog = createFogLayer(null, { source: store, color: [80, 220, 140], alpha: 200 });
     editor = FogEditor.attach({
       map: map, store: store, layer: fog, toast: toast,
       onChange: function (s) { editPtr = s.ptr; renderStatus(); },
@@ -613,10 +613,6 @@
           markBatch(list, 'ignored');
           toast(t('box.done', { n: list.length }));
         },
-      },
-      snapPoints: function () {   // 当前存档里检测到的断头都可吸附（别的存档带来的标记点不算）
-        if (!snapCache) snapCache = points.filter(function (p) { return p.present !== false; }).map(function (p) { return [p.px, p.py]; });
-        return snapCache;
       },
       api: {
         load: function () { return FogDB.get('edits:' + label).then(function (d) { return d || { ops: [], ptr: 0 }; }, function () { return { ops: [], ptr: 0 }; }); },
@@ -730,7 +726,6 @@
     if (e.key !== 'Tab') { e.stopPropagation(); if (e.key === 'Escape') e.preventDefault(); }
   }, true);
 
-  var snapCache = null;
   // 框选范围内、地图上可见（≥ 最低分）的待处理点
   function inBox(b) {
     return points.filter(function (p) { return p.status === 'open' && p.score >= minScore && b.contains([p.lat, p.lng]); });
