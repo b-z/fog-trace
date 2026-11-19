@@ -8,6 +8,12 @@
  *            每层世界 2^(22-L) 像素，区块仍是 8192 像素，每个子瓦片 512 字节（只有位图）
  * 文件名都是 md5(m)[:4] + 表1(n) + 表2(m % 100 两位)，m = n + k：
  *   *：n = 区块号，k = 0；#：n = 区块号，k = 74；~：n = 该层的区块号（Y × 每行区块数 + X），k = 层号 L
+ * Model/# 里另有两个固定名字的文件（名字 = md5(层名) 前 10 位）：
+ *   md5("*") = 3389dae361：512×512 位的区块位图，有 * 文件的区块置 1（导出时按最终区块重算）
+ *   md5("#") = 01abfc750a：按国家统计的面积，要用 App 自带的国界计算，这里原样保留
+ * 2026 年 10 月以后的 App 还会写 Model/#2（按国家、省、区县统计的面积和 commit 校验），同样依赖 App 的
+ * 行政区划数据，算不出来。旧的 #2 留着会让 App 不显示改过的区块，所以导出改过的快照时整层去掉，
+ * App 恢复时会要求重新构建数据库。
  * 这些规律都用真实快照逐字节核对过（tools/check_export.py 会验证导出的快照）。
  */
 (function (global) {
@@ -16,6 +22,7 @@
   var T1 = 'olhwjsktri', T2 = 'eizxdwknmo';
   var IDX = 128, INDEX_BYTES = 32768, BITMAP = 512, REC = 515, SUBS = 65536, LEVELS = 15;
   var HASH_K = 74;
+  var PRESENT_PATH = 'Model/#/3389dae361';   // md5("*") 前 10 位：区块位图
 
   function layerName(n, k) {
     var m = n + k, s = String(n), out = global.FogStore.md5hex(String(m)).slice(0, 4);
@@ -143,6 +150,23 @@
       files.set(path, st.tiles.size ? await deflate(want) : want);
       stats.hash++;
     }
+
+    // Model/#/<md5("*") 前 10 位>：哪些区块有 * 文件，512 × 512 位，低位在前（bit n = by * 512 + bx）。
+    // App 的快照都有这个文件；新建的区块要置位，擦空的要清掉
+    var present = new Uint8Array(512 * 512 / 8);
+    blocks.forEach(function (st) { if (st.tiles.size) present[st.blockNo >> 3] |= 1 << (st.blockNo & 7); });
+    var oldPresent = await original(PRESENT_PATH);
+    if (!oldPresent || oldPresent.length !== present.length || oldPresent.some(function (v, i) { return v !== present[i]; })) {
+      files.set(PRESENT_PATH, await deflate(present));
+      stats.present = 1;
+    }
+
+    // Model/#2（2026 年 10 月以后的 App）：按行政区统计的面积 + commit 校验，只有 App 能算。
+    // 实测：保留旧的 #2 时，App 不提示重建，但改过的区块在 App 里不显示。所以整层去掉，
+    // App 恢复这个快照时会要求「重新构建数据库」，重建后一切正常
+    byPath.forEach(function (e, path) {
+      if (path.indexOf('Model/#2/') === 0) { files.set(path, null); stats.v2 = (stats.v2 || 0) + 1; }
+    });
 
     // Model/~：受影响的祖先区块，从金字塔重新生成
     var levels = pyramid(blocks), need = new Set();

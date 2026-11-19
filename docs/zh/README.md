@@ -28,7 +28,7 @@ Fog Trace 读取 [世界迷雾 (Fog of World)](https://fogofworld.app) 的数据
 
 **存档在哪里。** App 开启同步后，数据在同步目录的 `Sync` 文件夹里（每个文件是一块地图区域）。iCloud 同步的 Mac 上在 `~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync`：在文件选择窗口里按 `⌘⇧G` 粘贴路径。还只在 iCloud 云端的文件要先在 Finder 里下载。Dropbox 同步的在 Dropbox 里 App 文件夹下的 `Sync`。
 
-**快照。** 不用同步、只用 App 快照的话，直接打开 `.fwss` 文件，它们在同一个 App 文件夹的 `Databases/<名字>.fwdb/Snapshots/<年>/<月>/` 里。快照里除了轨迹，还有两层由轨迹算出来的数据（每个子瓦片的像素数，和一套缩放金字塔）；导出编辑过的快照时，改过的区块对应的这两层都会重新计算，快照保持一致。
+**快照。** 不用同步、只用 App 快照的话，直接打开 `.fwss` 文件，它们在同一个 App 文件夹的 `Databases/<名字>.fwdb/Snapshots/<年>/<月>/` 里。快照里除了轨迹，还有两层由轨迹算出来的数据（每个子瓦片的像素数，和一套缩放金字塔）；导出编辑过的快照时，改过的区块对应的这两层都会重新计算，快照保持一致。2026 年 10 月以后的 App 写的快照里，还有按行政区统计的面积（`Model/#2`），要用 App 自带的行政区边界才能算。导出编辑过的快照时会去掉这一层，在 App 里恢复时 App 会要求重新构建数据库，照做即可，统计会重新算好。
 
 网页支持中文、English、日本語，右上角切换。
 

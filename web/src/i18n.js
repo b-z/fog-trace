@@ -175,6 +175,9 @@
       '已导出 {name}：改动 {changed} 个区块，新增 {created}，擦空删除 {emptied}，原样保留 {copied} 个文件',
       '{name} を書き出しました：変更 {changed} ブロック、新規 {created}、空になり削除 {emptied}、そのまま {copied} ファイル'],
     'e.exportSnap': [' · snapshot: also updated {hash} count blocks and {tilde} zoom-pyramid blocks', ' · 快照：同步更新了 {hash} 个统计区块、{tilde} 个缩放金字塔区块', ' · スナップショット：集計 {hash} ブロック、縮小ピラミッド {tilde} ブロックも更新'],
+    'e.exportRebuild': [' · The app will ask to rebuild the database when you restore it: the per-region statistics (Model/#2) only the app can compute, so they were left out',
+                        ' · 在 App 里恢复后，App 会要求重新构建数据库：按行政区统计的面积（Model/#2）只有 App 能算，已从快照里去掉',
+                        ' · App で復元すると、データベースの再構築を求められます。地域別の集計（Model/#2）は App でしか計算できないため、スナップショットから外しています'],
     'e.noDecompress': ['This browser lacks DecompressionStream: please use a current browser', '浏览器不支持 DecompressionStream，请换用现代浏览器', 'このブラウザは DecompressionStream に対応していません。最新のブラウザをお使いください'],
   };
 

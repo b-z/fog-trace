@@ -63,13 +63,13 @@ def layer_name(n, k):
 
 
 def layer_files(path):
-    """{'#': {name: raw}, '~': {name: raw}} of a snapshot zip; None for anything else."""
+    """{'#': {name: raw}, '~': {name: raw}, '#2': {name: raw}} of a snapshot zip; None for anything else."""
     if os.path.isdir(path):
         return None
     with zipfile.ZipFile(path) as z:
         if not any(n.startswith('Model/*/') for n in z.namelist()):
             return None
-        out = {'#': {}, '~': {}}
+        out = {'#': {}, '~': {}, '#2': {}}
         for i in z.infolist():
             parts = i.filename.split('/')
             if len(parts) == 3 and parts[0] == 'Model' and parts[1] in out:
@@ -107,6 +107,18 @@ def check_snapshot(B, layers, touched, errors):
         if got != want:
             errors.append(f'block {n}: Model/#/{name} does not match Model/*'); continue
         ok_hash += 1
+    # Model/#2 (region statistics of apps since 2026-10) cannot be recomputed here; left stale, the app hides the
+    # changed blocks, so an edited snapshot must not carry it (the app then asks to rebuild the database)
+    if touched and layers.get('#2'):
+        errors.append(f'Model/#2 still present ({len(layers["#2"])} files) although blocks changed')
+    # Model/#/<md5("*")[:10]>: 512 x 512 bit map (LSB first) of the blocks that have a Model/* file
+    present = layers['#'].get(hashlib.md5(b'*').hexdigest()[:10])
+    if present is not None:
+        bits = np.unpackbits(np.frombuffer(inflate(present), np.uint8), bitorder='little')
+        if set(np.nonzero(bits)[0].tolist()) != set(B):
+            errors.append('Model/# block bitmap does not match the blocks in Model/*')
+        else:
+            print(f'snapshot: block bitmap ok ({len(B)} blocks)')
     # pyramid from the edited Model/*: level L subtile (sx, sy) -> 64x64 bool
     lvl = {}
     for n, (f, raw) in B.items():

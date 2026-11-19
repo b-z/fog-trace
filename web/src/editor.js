@@ -324,7 +324,8 @@
         setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
         exportedPtr = ptr; save();
         toast(t('e.exportDone', { name: name, changed: s.changed, created: s.created, emptied: s.emptied, copied: s.copied }) +
-              (s.snapshot ? t('e.exportSnap', { hash: s.snapshot.hash, tilde: s.snapshot.tilde }) : ''), s.snapshot ? 9000 : undefined);
+              (s.snapshot ? t('e.exportSnap', { hash: s.snapshot.hash, tilde: s.snapshot.tilde }) : '') +
+              (s.snapshot && s.snapshot.v2 ? t('e.exportRebuild') : ''), s.snapshot ? (s.snapshot.v2 ? 15000 : 9000) : undefined);
       });
     }
 

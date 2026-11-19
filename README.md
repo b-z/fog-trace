@@ -28,7 +28,7 @@ It is a static web page. Your archive is read and processed only in your browser
 
 **Where the archive is.** With sync turned on, the app keeps your data in a `Sync` folder (one file per map area). With iCloud on a Mac it is `~/Library/Mobile Documents/iCloud~com~ollix~FogOfWorld/Documents/Sync`: in the file dialog press `⌘⇧G` and paste the path. Files that are still only in iCloud must be downloaded in Finder first. With Dropbox it is the `Sync` folder inside the app's Dropbox folder.
 
-**Snapshots.** If you use the app's snapshots instead of sync, open a `.fwss` file: they are in `Databases/<name>.fwdb/Snapshots/<year>/<month>/` in the same app folder. A snapshot holds the tracks plus two layers derived from them (per-subtile counts and a zoom pyramid); when you export an edited snapshot, both are recomputed for every block you changed, so the snapshot stays consistent.
+**Snapshots.** If you use the app's snapshots instead of sync, open a `.fwss` file: they are in `Databases/<name>.fwdb/Snapshots/<year>/<month>/` in the same app folder. A snapshot holds the tracks plus two layers derived from them (per-subtile counts and a zoom pyramid); when you export an edited snapshot, both are recomputed for every block you changed, so the snapshot stays consistent. Snapshots from app versions since October 2026 also hold per-region area statistics (`Model/#2`), which only the app can compute (it needs the app's own region borders). An edited snapshot leaves them out, so when you restore it the app asks you to rebuild the database: do so, and the statistics come back.
 
 The page is available in English, Chinese and Japanese (switch at the top right).
 
