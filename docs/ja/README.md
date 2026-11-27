@@ -44,6 +44,19 @@ Fog Trace は [Fog of World](https://fogofworld.app)のデータを読み込み�
 | 元に戻す `⌘Z` / やり直す `⇧⌘Z` | 消しゴムの 1 ストローク、ペンの 1 本が 1 ステップです |
 | アーカイブの書き出し | 変更したブロックだけを作り直し、ほかのファイルはバイト単位でそのままコピーします。すべて消したブロックはファイルを書きません（アプリと同じ動作） |
 
+## Flighty のフライトを描く
+
+### 👉 [フライトのページを開く](https://fog-trace.pages.dev/flights.html)
+
+もう一つのページで、[Flighty](https://flighty.com) に記録したフライトを Fog of World の地図に描けます。Flighty からフライトを CSV ファイルで書き出し、ページで開くと、スナップショット（`.fwss`）をダウンロードできます。
+
+1. スナップショットをデータベースのスナップショットフォルダに入れます。App の iCloud フォルダの `Databases/<名前>.fwdb/Snapshots/<年>/<月>/` です。フライト専用のデータベースにすると、地上の軌跡と分けられます。
+2. App で**復元**する（すべてのフライト）か、データベースに**統合**します（新しいフライトだけ）。そのあと App がデータベースの再構築を求めるので（地域別の集計は App が自分で計算します）、再構築してください。
+
+各フライトは、空港間の大圏に沿った 1 ピクセルの弧です（ダイバートした場合は実際の到着空港まで）。何度も乗った路線は両側に広がり、以前の路線に沿ってしまう新しい路線は少しだけ曲がります。各フライトの曲がり方はそれ以前のフライトだけで決まるので、次の旅行のあとは**新しいフライトだけ**を選んで小さなスナップショットを統合できます。前回のスナップショットより新しいフライトを足しただけなら、全部作り直したときとまったく同じ結果になります。ページは前回のスナップショットにどのフライトを入れたかをブラウザに記録し、その後に古いフライトが追加されていれば警告します。その場合はすべてのフライトで作って復元してください。まだ乗っていないフライトは、チェックを入れない限り描きません。
+
+処理はすべてブラウザ内で、Web Worker がブロックごとに行うため、数百便でもメモリをあまり使いません。空港の座標は [OurAirports](https://ourairports.com/data/)（パブリックドメイン）です。
+
 ## 検出のしくみ
 
 アーカイブを 32 × 32 サブタイル（2048 × 2048 ピクセル）の区画に分け、周囲 4 サブタイルの余白を付けて、Web Worker で並列に処理します。
@@ -84,6 +97,8 @@ Fog Trace は [Fog of World](https://fogofworld.app)のデータを読み込み�
 | `check_export.py` | 書き出したアーカイブ（zip、フォルダ、スナップショット）を検証：各ブロックの形式、未変更ブロックのバイト一致、スナップショットの派生層、`--ops` 付きで編集履歴をピクセル単位で独立に再生して比較 |
 | `apply_edits.js` | ブラウザなしで編集履歴をアーカイブに適用します（ページと同じコード） |
 | `store_selftest.js` | 保存処理のセルフテスト：ファイル名、無変更での再エンコード、実際の編集 |
+| `flights_selftest.js` | フライトのページの生成処理を Node で実行：Flighty CSV → スナップショット。`--since` で新しいフライトだけ、`--bends` / `--airports` で別実装の曲がり方と座標を使い、1 バイトずつ比較 |
+| `build_airports.py` | OurAirports の CSV から `web/src/airports.js` を作り直す |
 
 ブラウザ版の検出結果は Python 版と完全に一致します。細線化のルックアップテーブルと厳密なユークリッド特徴変換（等距離のときにどのピクセルを選ぶかまで）を scikit-image と SciPy から移植しています。
 
@@ -126,6 +141,10 @@ npx wrangler@4 pages deploy web --project-name fog-trace --branch main
 | `web/src/detect-worker.js` | Web Worker |
 | `web/src/storage.js` | IndexedDB：マーク、編集履歴、最後に開いたアーカイブ、検出キャッシュ |
 | `web/vendor/` | Leaflet 1.9.4、JSZip 3.10.1（ローカル配信、CDN なし） |
+| `web/flights.html`、`web/src/flights-page.js` | フライトのページ |
+| `web/src/flights-core.js` | Flighty CSV → 弧 → スナップショット：曲がり方、ラスタ化、`Model/*`・`#`・`~`、zip |
+| `web/src/flights-worker.js` | フライトのページの Web Worker |
+| `web/src/airports.js` | IATA コード → 座標（OurAirports から生成） |
 
 ## 背景地図
 
@@ -136,6 +155,7 @@ npx wrangler@4 pages deploy web --project-name fog-trace --branch main
 - アーカイブ形式：WeChat 公式アカウント「迷雾资料库」の Fog of World 解析記事、および vicc.wang の「迷雾橡皮擦」。
 - 検出の細線化と距離変換は [scikit-image](https://scikit-image.org/) と [SciPy](https://scipy.org/)（BSD-3-Clause）から移植しています。[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) を参照してください。
 - 地図：[Leaflet](https://leafletjs.com/)、© [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors。
+- フライトのページの空港座標：[OurAirports](https://ourairports.com/data/)（パブリックドメイン）。
 
 ## プロジェクトを支援する
 

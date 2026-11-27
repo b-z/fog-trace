@@ -44,6 +44,19 @@ Fog Trace 读取 [世界迷雾 (Fog of World)](https://fogofworld.app) 的数据
 | 撤销 `⌘Z` / 重做 `⇧⌘Z` | 一次拖擦或一条折线为一步 |
 | 导出存档 | 只重新编码改过的区块，其余文件逐字节原样保留；整块擦空的区块不写文件（与 App 的做法一致） |
 
+## 航班画进地图（Flighty）
+
+### 👉 [打开航班页](https://fog-trace.pages.dev/flights.html)
+
+另一个页面把 [Flighty](https://flighty.com) 里记录的航班画到《世界迷雾》地图上。在 Flighty 里把航班导出成 CSV 文件，在页面上打开，下载生成的快照（`.fwss`）：
+
+1. 把快照放进某个数据库的快照文件夹：App 的 iCloud 文件夹里的 `Databases/<名字>.fwdb/Snapshots/<年>/<月>/`。建议专门建一个放航班的数据库，和地面轨迹分开。
+2. 在 App 里**恢复**它（全部航班），或者把它**合并**进数据库（只要新航班）。之后 App 会要求重新构建数据库（按行政区的统计由 App 自己算），照做即可。
+
+每班航班是一条 1 像素的弧线，沿大圆连接两个机场（备降的连到实际降落的机场）。同一条航线飞过多次会向两侧散开；新航线如果会和以前的航线贴着走，会稍微弯开一点。每班的弯曲只取决于它之前的航班，所以下次旅行回来可以选**只要新航班**，把很小的快照合并进去：只要加的都是比上次快照更晚的航班，结果和整份重新生成完全一样。页面会在浏览器里记住上次快照包含了哪些航班，如果之后补录了更早的航班会提醒你，这时请生成全部航班并恢复。还没起飞的航班默认不画，勾选后才画。
+
+全部在浏览器里完成：在 Web Worker 里逐个区块生成，几百班航班也只占很少的内存。机场坐标来自 [OurAirports](https://ourairports.com/data/)（公有领域）。
+
 ## 检测原理
 
 存档按窗口处理，每个窗口 32 × 32 个子瓦片（2048 × 2048 像素）外加 4 个子瓦片的边距，用 Web Worker 并行：
@@ -84,6 +97,8 @@ Fog Trace 读取 [世界迷雾 (Fog of World)](https://fogofworld.app) 的数据
 | `check_export.py` | 校验导出的存档（zip、文件夹或快照）：每个区块的格式、未改区块逐字节一致、快照的两层派生数据；带 `--ops` 时独立重放编辑记录逐像素比对 |
 | `apply_edits.js` | 不开浏览器，把编辑记录套到存档上导出（与网页同一套代码） |
 | `store_selftest.js` | 存储层自测：文件名、无改动重新编码、真实编辑 |
+| `flights_selftest.js` | 在 Node 里运行航班页的生成器：Flighty CSV → 快照。`--since` 只画新航班；`--bends` / `--airports` 用另一个实现的弯曲和坐标，逐字节对比 |
+| `build_airports.py` | 用 OurAirports 的 CSV 重新生成 `web/src/airports.js` |
 
 浏览器版的检测结果与 Python 版完全一致：骨架化的查表和精确欧氏特征变换（包括等距时取哪个像素）都移植自 scikit-image 和 SciPy。
 
@@ -126,6 +141,10 @@ npx wrangler@4 pages deploy web --project-name fog-trace --branch main
 | `web/src/detect-worker.js` | Web Worker |
 | `web/src/storage.js` | IndexedDB：标记、编辑记录、最近的存档、检测缓存 |
 | `web/vendor/` | Leaflet 1.9.4、JSZip 3.10.1（本地文件，不走 CDN） |
+| `web/flights.html`、`web/src/flights-page.js` | 航班页 |
+| `web/src/flights-core.js` | Flighty CSV → 弧线 → 快照：弯曲、光栅化、`Model/*`、`#`、`~`、zip |
+| `web/src/flights-worker.js` | 航班页的 Web Worker |
+| `web/src/airports.js` | IATA 代码 → 坐标（由 OurAirports 生成） |
 
 ## 底图
 
@@ -136,6 +155,7 @@ npx wrangler@4 pages deploy web --project-name fog-trace --branch main
 - 存档格式：微信公众号「迷雾资料库」的世界迷雾逆向工程系列文章，以及 vicc.wang 的「迷雾橡皮擦」。
 - 检测中的骨架化与距离变换移植自 [scikit-image](https://scikit-image.org/) 和 [SciPy](https://scipy.org/)（BSD-3-Clause），见 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)。
 - 地图：[Leaflet](https://leafletjs.com/)、© [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors。
+- 航班页的机场坐标：[OurAirports](https://ourairports.com/data/)（公有领域）。
 
 ## 支持这个项目
 

@@ -44,6 +44,19 @@ The page is available in English, Chinese and Japanese (switch at the top right)
 | Undo `⌘Z` / Redo `⇧⌘Z` | One erase stroke or one line is one step |
 | Export archive | Only the blocks you changed are re-encoded; every other file is copied byte for byte. A block erased to nothing is left out, as the app itself does |
 
+## Flights from Flighty
+
+### 👉 [Open the flights page](https://fog-trace.pages.dev/flights.html)
+
+A second page draws the flights you logged in [Flighty](https://flighty.com) onto your Fog of World map. Export your flights from Flighty as a CSV file, open it on the page, and download a snapshot (`.fwss`):
+
+1. Put the snapshot into a database's snapshot folder: `Databases/<name>.fwdb/Snapshots/<year>/<month>/` in the app's iCloud folder. A database just for flights keeps them apart from your ground tracks.
+2. In the app, **restore** it (all flights) or **merge** it into the database (only new flights). The app then asks to rebuild the database (it computes the per-region statistics itself); do so.
+
+Each flight is a 1-pixel arc along the great circle between the airports (to the diversion airport if it was diverted). A route flown several times fans out to both sides, and a new route that would run along an earlier one bends away a little. A flight's bend depends only on the flights before it, so after your next trip you can choose **only new flights** and merge the small snapshot: it comes out exactly as a full regeneration would, as long as you only added flights newer than the last snapshot. The page remembers in the browser which flights went into your last snapshot and warns you when older flights were added since; then make all flights and restore. Flights not yet flown are left out unless you tick the box.
+
+Everything runs in the browser, block by block in a Web Worker, so memory stays low even for hundreds of flights. Airport coordinates come from [OurAirports](https://ourairports.com/data/) (public domain).
+
 ## How detection works
 
 The archive is processed in windows of 32 × 32 subtiles (2048 × 2048 pixels) with a margin of 4 subtiles, in parallel Web Workers:
@@ -84,6 +97,8 @@ The "Import archive & marks" menu can **export marks** as JSON (backup, or movin
 | `check_export.py` | Checks an exported archive (zip, folder or snapshot): format of every block, unchanged blocks byte-identical, the derived layers of a snapshot, and with `--ops` an independent pixel-by-pixel replay of the edit log |
 | `apply_edits.js` | Applies an edit log to an archive without a browser (same code as the page) |
 | `store_selftest.js` | Self-test of the storage layer: file names, no-op re-encoding, real edits |
+| `flights_selftest.js` | Runs the flights page's generator in Node: Flighty CSV → snapshot. `--since` draws only new flights; `--bends` / `--airports` take another implementation's bends and coordinates for a byte-by-byte comparison |
+| `build_airports.py` | Rebuilds `web/src/airports.js` from the OurAirports CSV |
 
 The browser detector gives exactly the same result as the Python one: the skeletonization lookup table and the exact Euclidean feature transform (including which pixel wins a tie) are ported from scikit-image and SciPy.
 
@@ -126,6 +141,10 @@ npx wrangler@4 pages deploy web --project-name fog-trace --branch main
 | `web/src/detect-worker.js` | Web Worker |
 | `web/src/storage.js` | IndexedDB: marks, edit logs, the last archive, detection cache |
 | `web/vendor/` | Leaflet 1.9.4 and JSZip 3.10.1, served locally (no CDN) |
+| `web/flights.html`, `web/src/flights-page.js` | The flights page |
+| `web/src/flights-core.js` | Flighty CSV → arcs → snapshot: bends, raster, `Model/*`, `#`, `~`, zip |
+| `web/src/flights-worker.js` | Web Worker for the flights page |
+| `web/src/airports.js` | IATA code → coordinates (generated from OurAirports) |
 
 ## Basemap
 
@@ -136,6 +155,7 @@ The basemap uses the OpenStreetMap tile servers, which per the [tile usage polic
 - Archive format: the "迷雾资料库" articles on reverse-engineering Fog of World, and vicc.wang's "迷雾橡皮擦" (fog eraser).
 - The skeletonization and distance transform in the detector are ported from [scikit-image](https://scikit-image.org/) and [SciPy](https://scipy.org/) (BSD-3-Clause); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - Map: [Leaflet](https://leafletjs.com/), © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors.
+- Airport coordinates on the flights page: [OurAirports](https://ourairports.com/data/) (public domain).
 
 ## Support the project
 
