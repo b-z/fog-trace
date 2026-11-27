@@ -35,6 +35,16 @@
   .mode { margin: 10px 0; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .mode .muted { font-size: 13px; }
   #map { height: 340px; border-radius: 8px; margin: 12px 0; background: #111; }
+  .tbl { max-height: 216px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; margin: 0 0 8px; font-size: 12px; }
+  .tbl:empty { display: none; }
+  .tbl table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .tbl th { position: sticky; top: 0; background: #1a1a1a; color: var(--muted); font-weight: 500; text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .tbl td { padding: 3px 8px; border-bottom: 1px solid #1c1c1c; white-space: nowrap; }
+  .tbl td.num, .tbl th.num { text-align: right; }
+  .tbl tbody tr { cursor: pointer; }
+  .tbl tbody tr:hover { background: #1d1d1d; }
+  .tbl tbody tr.sel { background: #2a2614; }
+  .tbl .tag { color: var(--accent); margin-left: 4px; }
   .osm { filter: brightness(.55) saturate(.4); }
   .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
   #fname { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
@@ -82,6 +92,7 @@
     </div>
     <div id="map"></div>
     <div class="row"><span id="count"></span></div>
+    <div class="tbl" id="tbl"></div>
     <div class="row">
       <label style="margin:0"><span data-i18n="fl.prefix"></span> <input type="text" id="o-prefix" value="Flights" size="14" spellcheck="false" autocomplete="off"></label>
       <span id="fname" class="muted"></span>

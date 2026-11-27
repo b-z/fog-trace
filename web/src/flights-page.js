@@ -57,7 +57,40 @@
       if (on) bounds = bounds ? bounds.extend(L.latLngBounds(lines[i])) : L.latLngBounds(lines[i]);
     });
     if (fit && bounds) map.fitBounds(bounds, { padding: [16, 16], maxZoom: 6 });
+    renderTable(draw);
   }
+
+  // ---------- 表格：要画的航班，最新的在上；点一行在地图上高亮 ----------
+  var hl = null, selRow = -1;
+  function fmtBend(c) { return c === 0 ? '0' : (c > 0 ? '+' : '−') + String(+Math.abs(c).toFixed(3)); }
+  function renderTable(draw) {
+    var idx = Array.from(draw).sort(function (a, b) { return b - a; });
+    if (!idx.length) { $('tbl').textContent = ''; return; }
+    var h = '<table><thead><tr><th>' + esc(t('fl.colDate')) + '</th><th>' + esc(t('fl.colFlight')) + '</th><th>' + esc(t('fl.colRoute')) +
+      '</th><th class="num">' + esc(t('fl.colDist')) + '</th><th class="num">' + esc(t('fl.colBend')) + '</th></tr></thead><tbody>';
+    idx.forEach(function (i) {
+      var f = list[i];
+      h += '<tr data-i="' + i + '"' + (i === selRow ? ' class="sel"' : '') + '><td>' + esc(f.date) + '</td><td>' + esc(f.flight) +
+        (f.upcoming ? '<span class="tag">' + esc(t('fl.upcomingTag')) + '</span>' : '') + '</td><td>' + esc(f.a) + ' → ' + esc(f.b) +
+        '</td><td class="num">' + Math.round(FogFlights.route(f).L).toLocaleString() + '</td><td class="num">' + fmtBend(bends[i]) + '</td></tr>';
+    });
+    $('tbl').innerHTML = h + '</tbody></table>';
+    if (selRow >= 0 && !draw.has(selRow)) highlight(-1);
+  }
+  function highlight(i) {
+    if (hl) { map.removeLayer(hl); hl = null; }
+    selRow = i;
+    $('tbl').querySelectorAll('tr.sel').forEach(function (r) { r.classList.remove('sel'); });
+    if (i < 0 || !lines[i]) return;
+    var row = $('tbl').querySelector('tr[data-i="' + i + '"]');
+    if (row) row.classList.add('sel');
+    hl = L.polyline(lines[i], { color: '#ffd34d', weight: 3, opacity: 1, interactive: false }).addTo(map);
+    map.fitBounds(L.latLngBounds(lines[i]), { padding: [24, 24], maxZoom: 7 });
+  }
+  $('tbl').addEventListener('click', function (e) {
+    var tr = e.target.closest('tr[data-i]');
+    if (tr) highlight(+tr.dataset.i === selRow ? -1 : +tr.dataset.i);
+  });
 
   // ---------- 选择 ----------
   function mode() { return document.querySelector('input[name=mode]:checked').value; }
@@ -87,6 +120,7 @@
   }
 
   function rebuildList(fit) {
+    if (map) highlight(-1);
     var up = $('o-up').checked;
     list = parsed.flights.filter(function (f) { return up || !f.upcoming; });
     bends = null;
